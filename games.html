@@ -48,7 +48,7 @@ function shut(){$("#md").classList.remove("s")}
 const orgBlock=()=>{if(S.me?.account_type==="organization"){alert("商家與機構帳號僅能在「親子活動」發佈活動；遊戲區僅供家長非商業分享。");return true}return false};
 const need=()=>{if(!S.u){authBox();return false}if(S.me?.suspended){alert("你的帳號已被停權，無法使用此功能。如有疑問請來信 "+MAIL);return false}return true};
 function authBox(reg){
-  modal(`<h3 style="margin-top:0">${reg?"註冊":"登入"}</h3>${reg?'<div class="r" style="margin:6px 0 10px"><label style="margin:0"><input type="radio" name="at" value="personal" checked style="width:auto;margin:0 4px 0 0">個人家長</label><label style="margin:0"><input type="radio" name="at" value="organization" style="width:auto;margin:0 4px 0 0">商家／機構</label></div><label>暱稱或商家／機構名稱（2–30 字，之後無法修改）<input id="an" maxlength="30"></label>':""}<label>Email<input id="ae" type="email"></label><label>密碼（至少 6 字）<input id="ap" type="password"></label>${reg?'<input id="hp" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px"><label class="mu" style="display:block;margin-bottom:10px"><input type="checkbox" id="ag" style="width:auto;margin:0 6px 0 0">我已閱讀並同意<a href="#/terms" target="_blank">使用條款與免責聲明</a>及<a href="#/privacy" target="_blank">隱私權政策</a></label>':""}<div id="cf"></div><div class="r"><button class="p" data-a="${reg?"signup":"login"}">${reg?"註冊":"登入"}</button><button data-a="shut">取消</button><a data-a="${reg?"auth":"reg"}">${reg?"已有帳號？登入":"沒有帳號？註冊"}</a>${reg?"":'<a data-a="forgot">忘記密碼？</a>'}</div><div class="mu" id="ae2"></div>`);setTimeout(cfInit,50);
+  modal(`<h3 style="margin-top:0">${reg?"註冊":"登入"}</h3>${reg?'<div class="r" style="margin:6px 0 10px"><label style="margin:0"><input type="radio" name="at" value="personal" checked style="width:auto;margin:0 4px 0 0">個人家長</label><label style="margin:0"><input type="radio" name="at" value="organization" style="width:auto;margin:0 4px 0 0">商家／機構</label></div><label>暱稱或商家／機構名稱（2–30 字，之後無法修改）<input id="an" maxlength="30"></label><div id="orgx" style="display:none"><label>商家或機構簡介（10–200 字，會顯示在你的活動頁）<textarea id="ab" rows="3" maxlength="200"></textarea></label><label>官方網站（選填）<input id="aw" type="url" maxlength="200" placeholder="https://"></label></div>':""}<label>Email<input id="ae" type="email"></label><label>密碼（至少 6 字）<input id="ap" type="password"></label>${reg?'<input id="hp" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px"><label class="mu" style="display:block;margin-bottom:10px"><input type="checkbox" id="ag" style="width:auto;margin:0 6px 0 0">我已閱讀並同意<a href="#/terms" target="_blank">使用條款與免責聲明</a>及<a href="#/privacy" target="_blank">隱私權政策</a></label>':""}<div id="cf"></div><div class="r"><button class="p" data-a="${reg?"signup":"login"}">${reg?"註冊":"登入"}</button><button data-a="shut">取消</button><a data-a="${reg?"auth":"reg"}">${reg?"已有帳號？登入":"沒有帳號？註冊"}</a>${reg?"":'<a data-a="forgot">忘記密碼？</a>'}</div><div class="mu" id="ae2"></div>`);setTimeout(cfInit,50);document.querySelectorAll("[name=at]").forEach(r=>r.onchange=()=>{const o=$("#orgx");if(o)o.style.display=document.querySelector("[name=at]:checked").value==="organization"?"block":"none"});
 }
 const act={
   shut,auth:()=>authBox(),reg:()=>authBox(true),
@@ -56,8 +56,10 @@ const act={
   async signup(){
     if($("#hp")&&$("#hp").value)return;if(!$("#ag").checked)return $("#ae2").textContent="請先勾選同意使用條款與隱私權政策。";
     const n=$("#an").value.trim();if(n.length<2)return $("#ae2").textContent="暱稱至少 2 個字。";
+    const at=(document.querySelector("[name=at]:checked")||{}).value||"personal";let bio="",web="";
+    if(at==="organization"){bio=$("#ab").value.trim();web=$("#aw").value.trim();if(bio.length<10)return $("#ae2").textContent="請填寫商家或機構簡介（至少 10 字）。";if(web&&!/^https?:\/\/[^\s]+$/i.test(web))return $("#ae2").textContent="官方網站需以 http:// 或 https:// 開頭。"}
     const{data:ex}=await sb.from("profiles").select("id").eq("nickname",n);if(ex&&ex.length)return $("#ae2").textContent="這個暱稱已被使用。";
-    const{error}=await sb.auth.signUp({email:$("#ae").value.trim(),password:$("#ap").value,options:{data:{nickname:n,account_type:(document.querySelector("[name=at]:checked")||{}).value||"personal"},captchaToken:CF()}});
+    const{error}=await sb.auth.signUp({email:$("#ae").value.trim(),password:$("#ap").value,options:{data:{nickname:n,account_type:at,bio,website:web},captchaToken:CF()}});
     if(error){$("#ae2").textContent="註冊失敗："+error.message;cfReset()}else{$("#ae2").textContent="註冊成功！若沒有自動登入，請到信箱點確認信。"}
   },
   async out(){await sb.auth.signOut();location.hash="#/"},
@@ -228,7 +230,7 @@ copyright:["著作權與下架申請",`<h3>投稿者的聲明</h3><ul><li>你投
 function doc(k){const[t,h]=DOCS[k];$("#app").innerHTML=`<p><a data-go="#/">← 返回</a></p><div class="doc"><h2>${t}</h2>${h}<p class="mu">最後更新：2026 年 10 月 25 日</p></div>`}
 async function route(){
   const[,k,id]=(location.hash||"#/").split("/");
-  if(k==="g")await detail(id);else if(k==="u")author(id);else if(k==="me"){await load();me()}else if(k==="admin")await admin();else if(k==="sheets")sheets();else if(DOCS[k])doc(k);else home();
+  if(k==="g")await detail(id);else if(k==="u")author(id);else if(k==="me"){await load();me()}else if(k==="admin")await admin();else if(k==="sheets")sheets();else if(k==="share"){home();history.replaceState(null,"","#/");act.new()}else if(DOCS[k])doc(k);else home();
   window.scrollTo(0,0);
 }
 async function setUser(sess){

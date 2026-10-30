@@ -22,16 +22,18 @@ button,.b{font:inherit;font-size:14px;cursor:pointer;border:1px solid var(--bd);
 .pick:hover{transform:translateY(-4px);box-shadow:var(--shadow)}
 .pick.a{background:linear-gradient(135deg,#e9efe3,#f5eadb)}.pick.b2{background:linear-gradient(135deg,#f5eadb,#ece0cf)}
 .pick .em{font-size:46px;line-height:1}.pick h2{font-size:31px;margin:14px 0 8px}.pick p{color:#76695b;margin:0 0 20px}.pick .go{font-weight:800;color:var(--ac-dark)}
-.share{background:var(--card);border:1px solid var(--bd);border-radius:20px;padding:20px 24px}.share h3{margin:0 0 6px}.share p{margin:0;color:var(--mu);font-size:15px}
+.share-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}.share-actions a{display:inline-flex;align-items:center;justify-content:center;border-radius:999px;padding:10px 17px;font-weight:700;font-size:14px;text-decoration:none;border:1px solid var(--bd);background:var(--card);color:var(--tx)}.share-actions a.primary{background:var(--ac);border-color:var(--ac);color:#fff}.share-actions a:hover{filter:brightness(.97);text-decoration:none}.intro h2{font-size:clamp(28px,4vw,40px)}.intro p{font-size:16px}.pick h2{font-size:clamp(25px,3vw,32px);line-height:1.3}.pick p{font-size:16px;line-height:1.75}.pick .go{font-size:15px}.share{background:var(--card);border:1px solid var(--bd);border-radius:20px;padding:20px 24px}.share h3{margin:0 0 6px}.share p{margin:0;color:var(--mu);font-size:15px}
 @media(prefers-color-scheme:dark){.pick.a{background:linear-gradient(135deg,#2f3a2b,#3a3328)}.pick.b2{background:linear-gradient(135deg,#3a3328,#332d25)}.pick p{color:var(--mu)}}
-@media(max-width:760px){.choose{grid-template-columns:1fr}.pick{min-height:0;padding:26px}.pick h2{font-size:26px}}
-.ft a{text-decoration:underline;color:var(--ac-dark)}</style></head><body>
+@media(max-width:760px){.w{padding:20px 16px 36px}.intro{padding-left:4px}.choose{grid-template-columns:1fr}.pick{min-height:0;padding:28px}.share{padding:20px}.share-actions a{flex:1}.pick h2{font-size:26px}}
+.ft a{text-decoration:underline;color:var(--ac-dark)}
+.pick{display:flex;flex-direction:column;min-height:240px;padding:38px 36px}.pick .eyebrow{margin-bottom:10px}.pick h2{margin:0 0 12px}.pick p{margin:0 0 28px;max-width:30em}.pick .go{margin-top:auto}
+@media(max-width:760px){.pick{min-height:0;padding:26px 24px}.pick p{margin-bottom:20px}}</style></head><body>
 <div class="w"><nav><div><h1 style="cursor:default">點子共玩所<small>Ideas together</small></h1><div class="sub">交換遊戲靈感，玩出親子生活的無限可能</div></div></nav>
-<div class="intro"><h2>今天想找什麼？</h2><p>選一個開始，每筆內容都經過審核。</p></div>
+<div class="intro"><h2>今天想找什麼？</h2><p>找靈感、找活動，也把生活中的好點子分享出去。</p></div>
 <div class="choose">
-<a class="pick a" href="events.html"><div class="em">🎈</div><h2>找親子活動</h2><p>查看近期活動日曆，依地點、孩子年齡、費用與時間篩選。</p><span class="go">看活動日曆 →</span></a>
-<a class="pick b2" href="games.html"><div class="em">🧩</div><h2>找遊戲</h2><p>在家就能玩的親子遊戲點子，依孩子年齡和現有材料來找。</p><span class="go">找遊戲點子 →</span></a>
+<a class="pick a" href="events.html"><div class="eyebrow">EVENTS</div><h2>找親子活動</h2><p>查看近期活動日曆，依地點、孩子年齡、費用與時間篩選。</p><span class="go">看活動日曆 →</span></a>
+<a class="pick b2" href="games.html"><div class="eyebrow">GAMES</div><h2>找遊戲</h2><p>在家就能玩的親子遊戲點子，依孩子年齡和現有材料來找。</p><span class="go">找遊戲點子 →</span></a>
 </div>
-<div class="share"><h3>分享你的點子</h3><p>家長可以分享居家遊戲，店家與機構可以分享親子活動資訊。本站僅提供資訊分享，不代收報名與費用。</p></div>
+<div class="share"><h3>一起分享，讓更多家庭找到好點子</h3><p>家長可以分享居家遊戲，店家與機構可以分享親子活動資訊。本站僅提供資訊分享，不代收報名與費用。</p><div class="share-actions"><a class="primary" href="events.html#/share">分享活動</a><a href="games.html#/share">分享遊戲</a></div></div>
 <footer class="ft"><a href="games.html#/terms">使用條款與免責聲明</a><a href="games.html#/privacy">隱私權政策</a><a href="games.html#/copyright">著作權與下架申請</a><span>聯絡：ideastogether2026@gmail.com</span></footer></div>
 </body></html>
