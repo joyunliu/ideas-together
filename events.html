@@ -26,7 +26,7 @@ button,.b{font:inherit;font-size:14px;cursor:pointer;border:1px solid var(--bd);
 .ev{display:flex;gap:14px;background:var(--card);border:1px solid var(--bd);border-radius:18px;padding:14px 16px;margin:10px 0;cursor:pointer;transition:box-shadow .2s,border-color .2s}.ev:hover{border-color:#c7d4bf;box-shadow:var(--shadow)}
 .dt{min-width:60px;text-align:center;background:var(--ac2);border-radius:14px;padding:6px 4px;line-height:1.35;align-self:flex-start}.dt b{display:block;font-size:18px}.dt span{font-size:12px;color:var(--mu)}
 .eb b{font-size:17px;display:block;line-height:1.45}.t.org{background:var(--tg);color:var(--mt)}
-.r label{flex:1;min-width:120px}.tp{display:flex;gap:6px;align-items:center}.tp select{flex:1.3;min-width:0}.tp input{flex:1;min-width:0}.tp select,.tp input{margin:5px 0 12px}.tabs{display:flex;gap:6px;margin:4px 8px 14px}.tabs a{padding:8px 20px;border-radius:999px;border:1px solid var(--bd);background:var(--card);color:var(--tx);font-weight:700;font-size:14px;text-decoration:none}.tabs a.on{background:var(--ac2);border-color:var(--ac);color:var(--ac-dark)}
+.r label{flex:1;min-width:120px}.tp{display:flex;gap:6px;align-items:center}.tp select{flex:1.3;min-width:0}.tp input{flex:1;min-width:0}.tp select,.tp input{margin:5px 0 12px}.kopt{display:flex;align-items:center;gap:6px;padding:8px 14px;border:1px solid var(--bd);border-radius:12px;background:var(--card);cursor:pointer}.kopt input{width:auto;margin:0}.r .kopt{flex:none;min-width:0}.tabs{display:flex;gap:6px;margin:4px 8px 14px}.tabs a{padding:8px 20px;border-radius:999px;border:1px solid var(--bd);background:var(--card);color:var(--tx);font-weight:700;font-size:14px;text-decoration:none}.tabs a.on{background:var(--ac2);border-color:var(--ac);color:var(--ac-dark)}
 @media(max-width:760px){.filter-grid{grid-template-columns:1fr 1fr}.filter-panel{padding:16px}.cal-box{padding:14px}.ev{padding:14px;gap:12px}.dt{min-width:58px}}
 .mb{position:relative}.mb .x{position:absolute;top:12px;right:12px;padding:4px 11px;font-size:16px;line-height:1.3;z-index:2}.mb h3{padding-right:44px}</style></head><body>
 <div class="w"><nav><div data-go="#/" style="cursor:pointer"><h1>點子共玩所<small>Ideas together</small></h1><div class="sub">親子活動日曆</div></div><div class="r" id="nav"></div></nav><div id="app"></div><footer class="ft"><a data-go="#/">活動首頁</a><a href="games.html#/terms">使用條款與免責聲明</a><a href="games.html#/privacy">隱私權政策</a><a href="games.html#/copyright">著作權與下架申請</a><span>聯絡：ideastogether2026@gmail.com</span></footer></div>
@@ -63,18 +63,31 @@ const pub=p=>sb.storage.from("photos").getPublicUrl(p).data.publicUrl;
 const d0=d=>new Date(d.getFullYear(),d.getMonth(),d.getDate());
 const ymd=d=>d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
 const endOf=e=>e.end_at?new Date(e.end_at):new Date(d0(new Date(e.start_at)).getTime()+864e5-1);
-const daysOf=e=>{const a=d0(new Date(e.start_at)),b=d0(endOf(e)),o=[];for(let d=a,i=0;d<=b&&i<62;d=new Date(d.getFullYear(),d.getMonth(),d.getDate()+1),i++)o.push(d);return o};
+const daysOf=e=>{if(e.dates&&e.dates.length)return e.dates.map(x=>{const[y,m,d]=x.split("-");return new Date(+y,+m-1,+d)});const a=d0(new Date(e.start_at)),b=d0(endOf(e)),o=[];for(let d=a,i=0;d<=b&&i<62;d=new Date(d.getFullYear(),d.getMonth(),d.getDate()+1),i++)o.push(d);return o};
 const md=d=>(d.getMonth()+1)+"/"+d.getDate();
 const multi=e=>daysOf(e).length>1;
 const fdate=d=>d.toLocaleDateString("zh-TW",{year:"numeric",month:"long",day:"numeric",weekday:"short"});
 const AUD={family:"親子",kids:"只有孩子",parents:"只有家長"};
 const TOD={am:[0,12],pm:[12,18],ev:[18,24]};
-const todR=e=>{if(e.flex_time)return[0,24];const s=new Date(e.start_at),a=s.getHours()+s.getMinutes()/60;let b=a+.01;if(e.end_at){const n=new Date(e.end_at);b=n.getHours()+n.getMinutes()/60;if(b<=a)b=24}return[a,b]};
-const sk=e=>e.flex_time?99:todR(e)[0];
+const todR=e=>{if(e.flex_time||e.continuous)return[0,24];const s=new Date(e.start_at),a=s.getHours()+s.getMinutes()/60;let b=a+.01;if(e.end_at){const n=new Date(e.end_at);b=n.getHours()+n.getMinutes()/60;if(b<=a)b=24}return[a,b]};
+const hh=t=>{const[a,b]=t.split(":");return +a+ +b/60};
+const todRs=e=>{if(e.flex_time||e.continuous)return[[0,24]];if(e.schedule&&e.schedule.length)return e.schedule.map(x=>{const a=hh(x.s);let b=x.e?hh(x.e):a+.01;if(b<=a)b=24;return[a,b]});return[todR(e)]};
+const sk=e=>{if(e.flex_time||e.continuous)return 99;if(e.schedule&&e.schedule.length){const x=e.schedule.find(y=>y.d===S.day)||e.schedule[0];return hh(x.s)}return todR(e)[0]};
 const lhost=u=>{try{return new URL(u).hostname}catch(x){return u}};
 const isOrg=e=>e.profiles?.account_type==="organization";
 const hm=d=>d.toLocaleTimeString("zh-TW",{hour:"2-digit",minute:"2-digit",hour12:false});
-const tRange=e=>{const s=new Date(e.start_at),n=e.end_at?new Date(e.end_at):null;return e.flex_time?(multi(e)?md(s)+" – "+md(n)+"・":"")+"可自行預約":multi(e)?md(s)+" "+hm(s)+" – "+md(n)+" "+hm(n):hm(s)+(n?"–"+hm(n):"")};
+const endT=e=>{if(!e.end_at)return null;const n=new Date(e.end_at);return n.getHours()===23&&n.getMinutes()===59?null:n};
+const rngTxt=e=>{const ds=daysOf(e);return e.dates&&e.dates.length?ds.map(md).join("、"):md(ds[0])+"–"+md(ds[ds.length-1])};
+const tRange=e=>{const sc=e.schedule;if(sc&&sc.length){const p=sc.slice(0,3).map(x=>md(new Date(x.d+"T00:00"))+" "+x.s+(x.e?"–"+x.e:"")).join("、");return p+(sc.length>3?"…（共 "+sc.length+" 天）":"")}
+  const s=new Date(e.start_at),n=endT(e),t=hm(s)+(n?"–"+hm(n):""),ds=daysOf(e);
+  if(e.flex_time)return(ds.length>1?rngTxt(e)+"・":"")+"可自行預約";
+  if(e.continuous)return md(s)+" "+hm(s)+" – "+md(new Date(e.end_at))+(n?" "+hm(n):"");
+  if(ds.length>1)return rngTxt(e)+" 每天 "+t;
+  return t};
+const dayLines=e=>{if(e.schedule&&e.schedule.length)return e.schedule.map(x=>fdate(new Date(x.d+"T00:00"))+" "+x.s+(x.e?"–"+x.e:"")).join("<br>");
+  const s=new Date(e.start_at),n=endT(e),t=hm(s)+(n?"–"+hm(n):""),ds=daysOf(e);
+  if(e.continuous)return"開始："+fdate(s)+" "+hm(s)+"<br>結束："+fdate(new Date(e.end_at))+(n?" "+hm(n):"");
+  return ds.length<=7||(e.dates&&e.dates.length)?ds.map(d=>fdate(d)+" "+t).join("<br>"):fdate(ds[0])+" 至 "+fdate(ds[ds.length-1])+"<br>每天 "+t};
 const ageTxt=e=>e.age_min===0&&e.age_max===12?"各年齡":e.age_min===e.age_max?e.age_min+" 歲":e.age_min+"–"+e.age_max+" 歲";
 const feeTxt=e=>e.fee?"NT$ "+e.fee:"免費";
 const nick=e=>e.profiles?.nickname||"主辦方";
@@ -115,7 +128,11 @@ const act={
   ft(el){const k=el.dataset.k,v=el.dataset.v;S[k].has(v)?S[k].delete(v):S[k].add(v);el.classList.toggle("on");draw()},
   sort(el){S.sort=el.dataset.v;draw()},
   clr(){["city","age","fee","when","org","aud","tod"].forEach(k=>S[k].clear());S.q="";S.day=null;home()},
-  day(el){const k=el.dataset.k;S.day=!k||S.day===k?null:k;draw()},
+  day(el){const k=el.dataset.k;S.day=!k||S.day===k?null:k;draw();if(S.day)$("#lt").scrollIntoView({behavior:"smooth",block:"start"})},
+  adddate(){const v=$("#fdl").value;if(!v)return;if(FD.length>=20)return alert("最多可加入 20 個日期。");if(!FD.includes(v))FD.push(v);FD.sort();$("#fdl").value="";drawChips()},
+  rmdate(el){FD=FD.filter(x=>x!==el.dataset.d);drawChips()},
+  addsch(){const v=$("#fsl").value;if(!v)return;syncSch();if(FS.length>=20)return alert("最多可加入 20 個日期。");if(FS.some(x=>x.d===v))return alert("這個日期已經加入了。");const last=FS[FS.length-1];FS.push({d:v,s:last?last.s:"",e:last?last.e:""});FS.sort((a,b)=>a.d<b.d?-1:1);$("#fsl").value="";drawSch()},
+  rmsch(el){syncSch();FS.splice(+el.dataset.i,1);drawSch()},
   pm(){S.month=new Date(S.month.getFullYear(),S.month.getMonth()-1,1);draw()},
   nm(){S.month=new Date(S.month.getFullYear(),S.month.getMonth()+1,1);draw()},
   async share(){try{await navigator.clipboard.writeText(location.href);alert("連結已複製")}catch(e){prompt("複製這個連結",location.href)}},
@@ -149,7 +166,7 @@ function list(){
     if(S.fee.size&&![...S.fee].some(f=>f==="free"?e.fee===0:f==="paid"?e.fee>0:e.fee<=+f))return false;
     if(S.org.size&&!S.org.has(e.profiles?.account_type))return false;
     if(S.aud.size&&!S.aud.has(e.audience))return false;
-    if(S.tod.size){const[a,b]=todR(e);if(![...S.tod].some(t=>t==="all"?(e.flex_time||b-a>=8):(a<TOD[t][1]&&b>TOD[t][0])))return false}
+    if(S.tod.size){const rs=todRs(e);if(![...S.tod].some(t=>t==="all"?(e.flex_time||rs.some(([a,b])=>b-a>=8)):rs.some(([a,b])=>a<TOD[t][1]&&b>TOD[t][0])))return false}
     if(q&&!(e.title+e.description+(e.venue||"")+(e.district||"")+e.city).toLowerCase().includes(q))return false;
     if(S.when.size&&![...S.when].some(w=>w==="today"?ds.some(x=>x[1]===0):w==="weekend"?ds.some(x=>[0,6].includes(x[0].getDay())&&x[1]>=0&&x[1]<=6):w==="7d"?ds.some(x=>x[1]>=0&&x[1]<=7):ds.some(x=>x[0].getMonth()===now.getMonth()&&x[0].getFullYear()===now.getFullYear())))return false;
     return true;
@@ -182,8 +199,9 @@ function home(){
   <div class="filter-label">參與對象</div><div class="filter-row">${grp("aud",[["family","親子"],["kids","只有孩子"],["parents","只有家長"]])}</div>
   <div class="filter-label">主辦方</div><div class="filter-row">${grp("org",[["personal","個人"],["organization","商家／機構"]])}</div></details>
   <div class="filter-actions"><span class="filter-count" id="fcount"></span><button data-a="clr">清除所有篩選</button></div></div>
-  <details class="calendar-panel" ${S.calOpen?"open":""}><summary>用日曆選擇日期（點選有活動的日期）</summary><div class="card-box" id="cal"></div></details><div class="section-head"><div><h2 id="lt"></h2><p>選擇活動卡片可查看完整資訊與主辦方連結。</p></div></div>
-  <div class="r"><button data-a="sort" data-v="soon">即將到來</button><button data-a="sort" data-v="new">最新活動</button></div><div id="el"></div>`;
+  <div class="section-head"><div><h2 id="lt"></h2><p>選擇活動卡片可查看完整資訊與主辦方連結。</p></div></div>
+  <div class="r"><button data-a="sort" data-v="soon">即將到來</button><button data-a="sort" data-v="new">最新活動</button></div><div id="el"></div>
+  <details class="calendar-panel" ${S.calOpen?"open":""}><summary>用日曆查看活動日期（點選有活動的日期，上方會顯示當天的活動）</summary><div class="card-box" id="cal"></div></details>`;
   $("#q").oninput=e=>{S.q=e.target.value;draw()};draw();
   $(".calendar-panel").ontoggle=ev=>{S.calOpen=ev.target.open};$(".advanced").ontoggle=ev=>{S.advOpen=ev.target.open};
 }
@@ -205,7 +223,7 @@ function detail(id){
   ${e.status!=="approved"?`<p class="rule">${e.status==="pending"?"審核中，目前只有你和管理員看得到。":"已被退回："+esc(e.reject_reason)+"。修改後可重新送審。"}</p>`:""}
   <div>${orgTag(e)}<span class="t ag">${ageTxt(e)}</span><span class="t">${AUD[e.audience]||"親子"}</span><span class="t ${e.fee?"":"ok"}">${feeTxt(e)}</span></div>
   ${e.photo?`<img class="big" src="${pub(e.photo)}" alt="" style="max-width:460px">`:""}
-  <p><b>時間</b><br>${e.flex_time?fdate(st)+(multi(e)?"<br>至 "+fdate(new Date(e.end_at)):"")+"<br>無特定時間／可自行預約":multi(e)?fdate(st)+" "+hm(st)+"<br>至 "+fdate(new Date(e.end_at))+" "+hm(new Date(e.end_at)):fdate(st)+" "+tRange(e)}</p>
+  <p><b>時間</b><br>${e.flex_time?(e.dates&&e.dates.length?daysOf(e).map(d=>fdate(d)).join("<br>"):fdate(st)+(multi(e)?"<br>至 "+fdate(new Date(e.end_at)):""))+"<br>無特定時間／可自行預約":multi(e)?dayLines(e):fdate(st)+" "+tRange(e)}</p>
   <p><b>地點</b><br>${esc(place)} <a href="${e.map_link?esc(e.map_link):"https://www.google.com/maps/search/?api=1&amp;query="+encodeURIComponent(place)}" target="_blank" rel="noopener noreferrer${e.map_link?" nofollow ugc":""}">地圖 ↗</a></p>
   <p><b>費用</b><br>${feeTxt(e)}${e.fee_note?"（"+esc(e.fee_note)+"）":""}</p>
   <p><b>活動說明</b><br>${esc(e.description).replace(/\n/g,"<br>")}</p>
@@ -225,20 +243,43 @@ async function admin(){
   await load();
   const p=S.ev.filter(e=>e.status==="pending");
   const{data:rp}=await sb.from("reports").select("*,events!event_id(title),target:profiles!target_user_id(id,nickname,suspended)").or("event_id.not.is.null,target_user_id.not.is.null").order("created_at");
-  $("#app").innerHTML=`<h2>待審核活動（${p.length}）</h2>${p.map(e=>`<div class="cm"><a data-go="#/e/${e.id}"><b>${esc(e.title)}</b></a> ${orgTag(e)} <span class="mu">${esc(nick(e))} · ${new Date(e.start_at).toLocaleString("zh-TW")} · ${esc(e.city)}${esc(e.district||"")} · ${ageTxt(e)} · ${feeTxt(e)}</span>${e.photo?`<div class="r"><img src="${pub(e.photo)}" alt="" width="120"></div>`:""}<p>${esc(e.description)}</p>${isOrg(e)&&e.profiles?.bio?`<p class="mu">主辦方簡介：${esc(e.profiles.bio)}${e.profiles.website?"｜"+esc(e.profiles.website):""}</p>`:""}<p class="mu">對象：${AUD[e.audience]||"親子"}${e.flex_time?"｜無特定時間／可自行預約":""}</p>${e.link?`<p class="mu">連結：<a href="${esc(e.link)}" target="_blank" rel="noopener noreferrer nofollow">${esc(e.link)}</a></p>`:""}${e.address?`<p class="mu">地址：${esc(e.address)}</p>`:""}${e.map_link?`<p class="mu">地圖連結：<a href="${esc(e.map_link)}" target="_blank" rel="noopener noreferrer nofollow">${esc(e.map_link)}</a></p>`:""}<div class="r"><button class="p" data-a="approve" data-id="${e.id}">核准</button>退回：${REASONS.map(r=>`<button class="d" data-a="reject" data-id="${e.id}" data-r="${r}">${r}</button>`).join("")}</div></div>`).join("")||'<p class="mu">沒有待審核的活動。</p>'}
+  $("#app").innerHTML=`<h2>待審核活動（${p.length}）</h2>${p.map(e=>`<div class="cm"><a data-go="#/e/${e.id}"><b>${esc(e.title)}</b></a> ${orgTag(e)} <span class="mu">${esc(nick(e))} · ${tRange(e)} · ${esc(e.city)}${esc(e.district||"")} · ${ageTxt(e)} · ${feeTxt(e)}</span>${e.photo?`<div class="r"><img src="${pub(e.photo)}" alt="" width="120"></div>`:""}<p>${esc(e.description)}</p>${isOrg(e)&&e.profiles?.bio?`<p class="mu">主辦方簡介：${esc(e.profiles.bio)}${e.profiles.website?"｜"+esc(e.profiles.website):""}</p>`:""}<p class="mu">對象：${AUD[e.audience]||"親子"}${e.flex_time?"｜無特定時間／可自行預約":""}</p>${e.link?`<p class="mu">連結：<a href="${esc(e.link)}" target="_blank" rel="noopener noreferrer nofollow">${esc(e.link)}</a></p>`:""}${e.address?`<p class="mu">地址：${esc(e.address)}</p>`:""}${e.map_link?`<p class="mu">地圖連結：<a href="${esc(e.map_link)}" target="_blank" rel="noopener noreferrer nofollow">${esc(e.map_link)}</a></p>`:""}<div class="r"><button class="p" data-a="approve" data-id="${e.id}">核准</button>退回：${REASONS.map(r=>`<button class="d" data-a="reject" data-id="${e.id}" data-r="${r}">${r}</button>`).join("")}</div></div>`).join("")||'<p class="mu">沒有待審核的活動。</p>'}
   <h2>檢舉（${rp?.length||0}）</h2>${(rp||[]).map(r=>`<div class="cm">${r.event_id?`<a data-go="#/e/${r.event_id}">活動：${esc(r.events?.title)}</a>`:`主辦方：${esc(r.target?.nickname)}${r.target?.suspended?"（已停權）":""} <a data-a="${r.target?.suspended?"unsus":"sus"}" data-id="${r.target_user_id}">${r.target?.suspended?"解除停權":"停權"}</a>`}<br>原因：${esc(r.reason)} <a data-a="delrep" data-id="${r.id}">忽略此檢舉</a></div>`).join("")||'<p class="mu">沒有檢舉。</p>'}`;
 }
+let FD=[],FS=[];
+const tps=(id,t)=>{const[h,m]=(t||"").split(":");return `<div class="tp"><select id="${id}h"><option value="">時</option>${Array.from({length:24},(_,i)=>{const x=String(i).padStart(2,"0");return `<option value="${x}" ${h===x?"selected":""}>${x}</option>`}).join("")}</select><span>:</span><input id="${id}m" list="mins" inputmode="numeric" maxlength="2" placeholder="分" value="${m||""}"></div>`};
+function syncSch(){FS.forEach((x,i)=>{if(!$("#sa"+i+"h"))return;x.s=tv("sa"+i);x.e=tv("sb"+i)})}
+function drawSch(){const b=$("#schrows");if(!b)return;b.innerHTML=FS.map((x,i)=>{const d=new Date(x.d+"T00:00");return `<div class="cm"><div class="r" style="justify-content:space-between"><b>${md(d)}（週${WK[d.getDay()]}）</b><button data-a="rmsch" data-i="${i}" aria-label="移除這一天" style="color:var(--er)">× 移除</button></div><div class="r"><label>開始時間${tps("sa"+i,x.s)}</label><label>結束時間（選填）${tps("sb"+i,x.e)}</label></div></div>`}).join("")||'<p class="mu">還沒有加入日期</p>'}
+function drawChips(){const b=$("#dchips");if(b)b.innerHTML=FD.map(d=>{const x=new Date(d+"T00:00");return `<span class="t" style="font-size:13px;padding:5px 6px 5px 11px">${md(x)}（週${WK[x.getDay()]}）<button data-a="rmdate" data-d="${d}" aria-label="移除這個日期" style="border:0;background:none;padding:0 6px;cursor:pointer;color:var(--er)">×</button></span>`}).join("")||'<span class="mu">還沒有加入日期</span>'}
+function kindUI(){const k=(document.querySelector("[name=fk]:checked")||{}).value||"";
+  $("#k_single").style.display=k==="single"?"":"none";$("#k_dates").style.display=k==="dates"?"":"none";$("#k_range").style.display=k==="range"?"":"none";$("#k_sched").style.display=k==="sched"?"":"none";
+  $("#tbox").style.display=k&&k!=="sched"?"":"none";$("#contbox").style.display=k==="range"?"block":"none";
+  if(k!=="range")$("#fcont").checked=false;
+  const cont=k==="range"&&$("#fcont").checked;$("#fxbox").style.display=cont?"none":"block";if(cont)$("#fx").checked=false;
+  $("#tprow").style.display=$("#fx").checked?"none":"";
+  $("#lbs").textContent=k==="single"?"開始時間（24 小時制）":cont?"第一天的開始時間（24 小時制）":"每天開始時間（24 小時制）";
+  $("#lbe").textContent=k==="single"?"結束時間（選填）":cont?"最後一天的結束時間":"每天結束時間（選填）";
+  $("#khint").textContent={"":"請先選擇活動類型，再填寫日期與時間。",single:"單日活動：只在一天舉辦。",dates:"多日活動：選出舉辦的每一天（日期不一定相連），每天使用相同的時段，例如 11/7 和 11/21 都是 09:00–12:00。",sched:"每天時間不同：選出舉辦的每一天，並為每一天填寫自己的開始與結束時間，例如 11/7 是 09:00–12:00，11/8 是 13:00–16:00。",range:"連續多日：從開始日到結束日每天都舉辦，每天使用相同的時段。如果是住宿營隊這類不分每天的活動，請勾選「跨日連續進行」。"}[k]}
 function form(e){
   const org=S.me?.account_type==="organization",st=e?new Date(e.start_at):null,en=e&&e.end_at?new Date(e.end_at):null;
+  const kind=!e?"":(e.schedule&&e.schedule.length>1)?"sched":(e.dates&&e.dates.length>1)?"dates":(en&&ymd(en)!==ymd(st)?"range":"single");FD=e&&e.dates&&!e.schedule?[...e.dates]:[];FS=e&&e.schedule?e.schedule.map(x=>({...x})):[];
   const tp=(id,d)=>`<div class="tp"><select id="${id}h"><option value="">時</option>${Array.from({length:24},(_,i)=>{const h=String(i).padStart(2,"0");return `<option value="${h}" ${d&&d.getHours()===i?"selected":""}>${h}</option>`}).join("")}</select><span>:</span><input id="${id}m" list="mins" inputmode="numeric" maxlength="2" placeholder="分" value="${d?String(d.getMinutes()).padStart(2,"0"):""}"></div>`;
   const ages=s=>Array.from({length:13},(_,i)=>`<option value="${i}" ${s===i?"selected":""}>${i} 歲</option>`).join("");
   modal(`<h3 style="margin-top:0">${e?"編輯活動":"分享一個活動"}</h3>
   <div class="rule"><b>活動投稿規則</b><ul><li>僅分享活動資訊：不接受折扣促銷、團購、業配、抽獎集客等文字</li><li>請完整填寫日期時間、地點、適合年齡與費用（含材料費），費用須誠實標示</li><li>本站不代收報名與費用，請提供主辦方的報名或詳情連結${org?"（商家／機構必填）":""}</li><li>${org?"商家／機構請填寫完整地址":"個人舉辦的活動只公開到縣市與區，請勿填住家地址，並盡量使用公共場地"}</li><li>活動說明 800 字內，照片 1 張（8 MB 內，會自動壓縮），請遵守隱私及著作權</li><li>活動結束後會自動從日曆隱藏；送出後需經審核才會公開，編輯後也會重新審核</li></ul></div>
   <label>活動主題（20 字內）<input id="ft" maxlength="20" value="${esc(e?.title)}"></label>
-  <div class="r"><label>開始日期<input id="fd" type="date" value="${st?ymd(st):""}"></label><label>結束日期（選填）<input id="fd2" type="date" value="${en&&ymd(en)!==ymd(st)?ymd(en):""}"></label></div>
-  <p class="mu" style="margin:-4px 0 10px">連續多天的活動請填結束日期，日曆每天都會顯示。</p>
-  <label class="mu" style="display:block;margin:0 0 10px"><input type="checkbox" id="fx" style="width:auto;margin:0 6px 0 0" ${e&&e.flex_time?"checked":""} onchange="document.getElementById('tprow').style.display=this.checked?'none':''">無特定時間／可自行預約</label>
-  <div class="r" id="tprow" style="${e&&e.flex_time?"display:none":""}"><label>開始時間（24 小時制）${tp("fs1",e&&e.flex_time?null:st)}</label><label>結束時間（選填）${tp("fe1",e&&e.flex_time?null:en)}</label></div>
+  <div class="filter-label" style="margin-top:4px">活動類型</div>
+  <div class="r">${[["single","單日活動"],["dates","多日活動（指定幾天）"],["range","連續多日（連續幾天）"],["sched","每天時間不同（逐日設定）"]].map(([v,t])=>`<label class="kopt"><input type="radio" name="fk" value="${v}" ${kind===v?"checked":""} onchange="kindUI()">${t}</label>`).join("")}</div>
+  <p class="mu" id="khint" style="margin:0 0 10px"></p>
+  <div id="k_single"><label>活動日期<input id="fd1" type="date" value="${kind==="single"&&st?ymd(st):""}"></label></div>
+  <div id="k_dates"><label>指定日期（選好日期後按「加入」，至少 2 天）</label><div class="r"><input id="fdl" type="date" style="flex:1;margin:0"><button data-a="adddate">加入</button></div><div class="r" id="dchips"></div></div>
+  <div id="k_sched"><label>指定日期（選好日期後按「加入」，每一天可以填不同的時間）</label><div class="r"><input id="fsl" type="date" style="flex:1;margin:0"><button data-a="addsch">加入</button></div><div id="schrows"></div></div>
+  <div id="k_range"><div class="r"><label>開始日期<input id="fr1" type="date" value="${kind==="range"&&st?ymd(st):""}"></label><label>結束日期<input id="fr2" type="date" value="${kind==="range"&&en?ymd(en):""}"></label></div></div>
+  <div id="tbox">
+  <label class="mu" id="fxbox" style="display:block;margin:0 0 10px"><input type="checkbox" id="fx" style="width:auto;margin:0 6px 0 0" ${e&&e.flex_time?"checked":""} onchange="kindUI()">無特定時間／可自行預約</label>
+  <div class="r" id="tprow"><label><span id="lbs"></span>${tp("fs1",e&&e.flex_time?null:st)}</label><label><span id="lbe"></span>${tp("fe1",e&&!e.flex_time&&endT(e)?en:null)}</label></div>
+  <label class="mu" id="contbox" style="display:block;margin:0 0 10px"><input type="checkbox" id="fcont" style="width:auto;margin:0 6px 0 0" ${e&&e.continuous?"checked":""} onchange="kindUI()">跨日連續進行（例如住宿營隊，不是每天各有一段時間）</label>
+  </div>
   <datalist id="mins"><option value="00"><option value="15"><option value="30"><option value="45"></datalist>
   <div class="r"><label>縣市<select id="fc" onchange="fillDist()"><option value="">請選擇縣市</option>${CITIES.map(c=>`<option ${e?.city===c?"selected":""}>${c}</option>`).join("")}</select></label><label>區／鄉鎮（選填）<select id="fz"></select></label></div>
   <label>活動地點<input id="fv" maxlength="60" placeholder="例如：場館或店家名稱" value="${esc(e?.venue)}"></label>
@@ -251,7 +292,7 @@ function form(e){
   <label>${org?"報名或詳情連結（必填）":"報名或詳情連結（選填）"}<input id="fl" type="url" maxlength="200" placeholder="https://" value="${esc(e?.link)}"></label>
   <label>活動照片（選填，1 張${e?"；不選就保留原圖":""}）<input id="fp" type="file" accept="image/*"></label>
   <div class="r"><button class="p" id="fsub">${e?"儲存並重新送審":"送出審核"}</button><button data-a="shut">取消</button></div><div class="mu" id="fe"></div>`);
-  $("#fsub").onclick=()=>submit(e);fillDist(e&&e.district);
+  $("#fsub").onclick=()=>submit(e);fillDist(e&&e.district);kindUI();drawChips();drawSch();
 }
 async function shrink(f){
   const bm=await createImageBitmap(f),k=Math.min(1,900/Math.max(bm.width,bm.height)),c=document.createElement("canvas");
@@ -261,14 +302,27 @@ async function shrink(f){
 function tv(id){const h=$("#"+id+"h").value;if(!h)return"";let m=$("#"+id+"m").value.trim();if(m==="")m="00";if(!/^\d{1,2}$/.test(m)||+m>59)return null;return h+":"+m.padStart(2,"0")}
 async function submit(e){
   const er=$("#fe"),org=S.me?.account_type==="organization",v=i=>$("#"+i)?$("#"+i).value.trim():"";
-  const fx=$("#fx").checked,t=v("ft"),h=v("fh"),d=v("fd"),s1=fx?"00:00":tv("fs1"),e1=fx?"":tv("fe1"),lk=v("fl"),mp=v("fmp"),f=+v("ff"),a1=+v("fa1"),a2=+v("fa2"),file=$("#fp").files[0];
+  const k=(document.querySelector("[name=fk]:checked")||{}).value||"";
+  if(!k)return er.textContent="請先選擇活動類型（單日、多日或連續多日）。";
+  const cont=k==="range"&&$("#fcont").checked,fx=k!=="sched"&&!cont&&$("#fx").checked;
+  let s1=k==="sched"?"":fx?"00:00":tv("fs1"),e1=k==="sched"?"":fx?"":tv("fe1"),sched=null;
+  const t=v("ft"),h=v("fh"),lk=v("fl"),mp=v("fmp"),f=+v("ff"),a1=+v("fa1"),a2=+v("fa2"),file=$("#fp").files[0];
   if(s1===null||e1===null)return er.textContent="分鐘請輸入 00 到 59。";
-  if(!t||!h||!d||!s1)return er.textContent="請填寫名稱、日期、開始時間與活動說明。";
-  const d2=v("fd2"),st=new Date(d+"T"+s1),en=d2?new Date(d2+"T"+(e1||"23:59")):e1?new Date(d+"T"+e1):null;
+  let d1="",d2="",dates=null;
+  if(k==="single")d1=v("fd1");
+  else if(k==="dates"){if(FD.length<2)return er.textContent="多日活動請至少加入 2 個日期。";dates=[...FD];d1=dates[0];d2=dates[dates.length-1]}
+  else if(k==="sched"){syncSch();if(FS.length<2)return er.textContent="請至少加入 2 個日期。";for(const x of FS){if(x.s===null||x.e===null||!x.s)return er.textContent="請填寫每一天的開始時間（分鐘請輸入 00 到 59）。";if(x.e&&x.e<=x.s)return er.textContent="每一天的結束時間需晚於開始時間。"}dates=FS.map(x=>x.d);sched=FS.map(x=>({d:x.d,s:x.s,e:x.e||null}));d1=dates[0];d2=dates[dates.length-1];s1=FS[0].s;e1=FS[FS.length-1].e||""}
+  else{d1=v("fr1");d2=v("fr2");if(!d2)return er.textContent="請選擇結束日期。";if(d1&&d2<=d1)return er.textContent="結束日期需晚於開始日期。"}
+  if(!t||!h||!d1||!s1)return er.textContent="請填寫活動主題、日期、開始時間與活動說明。";
+  if(cont&&!e1)return er.textContent="跨日連續進行的活動，請填寫最後一天的結束時間。";
+  const st=new Date(d1+"T"+s1),en=k==="single"?(e1?new Date(d1+"T"+e1):null):new Date(d2+"T"+(e1||"23:59"));
   if(isNaN(st))return er.textContent="日期或時間格式不正確。";
-  if(!e&&(fx?d<ymd(new Date()):st<new Date()))return er.textContent="活動時間需在現在之後。";
-  if(en&&en<=st)return er.textContent="結束日期與時間需晚於開始。";
-  if(en&&(en-st)/864e5>31)return er.textContent="活動最長 31 天。";
+  if(!e&&(fx?d1<ymd(new Date()):st<new Date()))return er.textContent="活動時間需在現在之後。";
+  if(k==="single"&&en&&en<=st)return er.textContent="結束時間需晚於開始時間。";
+  if(k!=="single"&&k!=="sched"&&!cont&&e1&&e1<=s1)return er.textContent="結束時間需晚於開始時間（多日活動的時間代表每天的時段）。";
+  if(cont&&en<=st)return er.textContent="最後一天的結束時間需晚於開始。";
+  if(k==="range"&&(en-st)/864e5>31)return er.textContent="連續多日的活動最長 31 天。";
+  if((k==="dates"||k==="sched")&&(en-st)/864e5>90)return er.textContent="多日活動的日期範圍最長 90 天。";
   if(!$("#fc").value)return er.textContent="請選擇縣市。";
   if(a2<a1)return er.textContent="適合年齡的範圍有誤。";
   if(!(f>=0&&f<=100000))return er.textContent="費用需在 0 到 100000 之間。";
@@ -280,7 +334,7 @@ async function submit(e){
   try{
     let photo=e?e.photo:null;
     if(file){const p=S.u.id+"/"+crypto.randomUUID()+".webp";const{error}=await sb.storage.from("photos").upload(p,await shrink(file),{contentType:"image/webp"});if(error)throw error;if(e&&e.photo)await sb.storage.from("photos").remove([e.photo]);photo=p}
-    const row={title:t,description:h,start_at:st.toISOString(),end_at:en?en.toISOString():null,city:$("#fc").value,district:v("fz")||null,venue:v("fv")||null,address:org?(v("fad")||null):null,age_min:a1,age_max:a2,fee:f,fee_note:v("fn")||null,link:lk||null,map_link:mp||null,audience:$("#fau").value,flex_time:fx,photo,status:"pending",reject_reason:null};
+    const row={title:t,description:h,start_at:st.toISOString(),end_at:en?en.toISOString():null,city:$("#fc").value,district:v("fz")||null,venue:v("fv")||null,address:org?(v("fad")||null):null,age_min:a1,age_max:a2,fee:f,fee_note:v("fn")||null,link:lk||null,map_link:mp||null,audience:$("#fau").value,flex_time:fx,continuous:cont,dates,schedule:sched,photo,status:"pending",reject_reason:null};
     const{error}=e?await sb.from("events").update(row).eq("id",e.id):await sb.from("events").insert({...row,author_id:S.u.id});
     if(error)throw error;await load();shut();alert("已送出，審核通過後就會公開。");location.hash="#/me";route();
   }catch(x){er.textContent="送出失敗："+zh(x);$("#fsub").disabled=false}
