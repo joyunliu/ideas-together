@@ -15,7 +15,7 @@ button,.b{font:inherit;font-size:14px;cursor:pointer;border:1px solid var(--bd);
 @media(max-width:760px){.w{padding:16px 14px 32px}nav{align-items:center;flex-wrap:wrap;gap:8px}nav>div:first-child{flex:1 1 100%;min-width:0}#nav{justify-content:flex-start;margin:0}#nav button{padding:7px 10px;font-size:12px;white-space:nowrap}nav h1{font-size:20px;white-space:nowrap;padding-left:8px}nav h1 small{display:inline;margin-left:5px;font-size:9px}.sub{font-size:11px;line-height:1.4}.hero{grid-template-columns:1fr;padding:24px 21px;min-height:0}.hero h2{font-size:clamp(18px,5.8vw,30px)}.hero p{white-space:normal;font-size:13px}.hero-art{display:none}.g{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.cb{padding:12px}.cb b{font-size:15px}.filter-panel{padding:13px}.section-head{align-items:start;flex-direction:column}.filter-footer{align-items:flex-start}.mb{padding:18px;margin:8px auto}}
 @media(max-width:430px){nav h1{font-size:18px}nav h1 small{font-size:8px;letter-spacing:.02em}#nav button{padding:6px 8px;font-size:11px}.sub{font-size:10px}.g{grid-template-columns:1fr 1fr;gap:9px}.ph{aspect-ratio:1.15}.cb{padding:10px}.cb b{font-size:14px}.cb .mu{font-size:12px}.t{font-size:10px;padding:2px 7px}.hero-actions button{flex:1}.filter-row{gap:5px}.filter-row button{font-size:12px;padding:6px 10px}}
 .ft{border-top:1px solid var(--bd);margin-top:40px;padding-top:16px;font-size:13px;color:var(--mu);display:flex;gap:6px 16px;flex-wrap:wrap}.doc{background:var(--card);border:1px solid var(--bd);border-radius:18px;padding:22px 24px;margin-top:12px}.doc h2{margin-top:0}.doc h3{font-size:17px;margin:20px 0 6px}.doc li,.doc p{font-size:15px}
-</style></head><body>
+.mb{position:relative}.mb .x{position:absolute;top:12px;right:12px;padding:4px 11px;font-size:16px;line-height:1.3;z-index:2}.mb h3{padding-right:44px}</style></head><body>
 <div class="w"><nav><div data-go="#/" style="cursor:pointer"><h1>點子共玩所<small>Ideas together</small></h1><div class="sub">交換遊戲靈感，玩出親子生活的無限可能</div></div><div class="r" id="nav"></div></nav><div id="app"></div><footer class="ft"><a data-go="#/terms">使用條款與免責聲明</a><a data-go="#/privacy">隱私權政策</a><a data-go="#/copyright">著作權與下架申請</a><span>聯絡：ideastogether2026@gmail.com</span></footer></div>
 <div class="m" id="md"><div class="mb" id="mb"></div></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
@@ -23,27 +23,38 @@ button,.b{font:inherit;font-size:14px;cursor:pointer;border:1px solid var(--bd);
 const SB_URL="https://impuxatitpghslleasma.supabase.co",SB_KEY="sb_publishable_bufFrNEhfUMxuwNmFOosRg_rPiekiNf";
 const sb=supabase.createClient(SB_URL,SB_KEY);
 const MAIL="ideastogether2026@gmail.com";
+function zh(e){const m=String(e&&e.message||e||"");
+  const C={events_title_check:"活動主題需在 20 字內",games_title_check:"遊戲名稱需在 20 字內",games_how_check:"玩法需在 500 字內",games_materials_check:"材料最多 10 項",games_age_check:"年齡選項不正確",comments_body_check:"留言需在 300 字內",events_description_check:"活動說明需在 800 字內",events_fee_check:"費用需在 0 到 100000 元之間",events_check:"建議年齡的範圍有誤",games_link_check:"連結格式不正確，需以 http:// 或 https:// 開頭",events_link_check:"連結格式不正確，需以 http:// 或 https:// 開頭",events_map_link_check:"地圖連結格式不正確，需以 http:// 或 https:// 開頭",profiles_nickname_check:"名稱需在 2 到 30 字之間",profiles_bio_check:"簡介需在 200 字內"};
+  for(const k in C)if(m.includes(k))return C[k]+"。";
+  if(/[\u4e00-\u9fff]/.test(m))return m;
+  const N={city:"縣市",title:"名稱",description:"活動說明",how:"玩法",start_at:"開始時間",nickname:"名稱",age:"年齡",age_min:"建議年齡",age_max:"建議年齡"};
+  let r;if(r=m.match(/null value in column "(\w+)"/))return "有必填欄位沒有填寫（"+(N[r[1]]||r[1])+"），請檢查後再送出。";
+  const R=[[/Invalid login credentials/i,"Email 或密碼不正確，請再確認一次。"],[/Email not confirmed/i,"這個 Email 還沒完成驗證，請到信箱點確認信後再登入。"],[/already registered|already been registered/i,"這個 Email 已經註冊過了，請直接登入，或使用「忘記密碼」。"],[/at least 6 characters|Password should be/i,"密碼至少需要 6 個字。"],[/Database error saving new user/i,"註冊失敗：這個名稱可能已被使用，或資料格式不正確，請換一個名稱再試。"],[/rate limit|only request this after|too many requests/i,"操作太頻繁了，請稍等一下再試。"],[/captcha/i,"驗證碼沒有通過，請重新整理頁面後再試。"],[/Unable to validate email|invalid format|is invalid/i,"Email 格式不正確，請重新確認。"],[/different from the old password/i,"新密碼不能和舊密碼相同。"],[/session missing|JWT|token is expired|refresh token/i,"登入已過期，請重新登入。"],[/row-level security|permission denied/i,"你沒有權限執行這個動作。可能的原因：尚未登入、帳號已被停權，或商家／機構帳號不能在遊戲區投稿或留言。"],[/duplicate key|unique constraint/i,"這筆資料已經存在，請不要重複操作，或換一個名稱再試。"],[/violates check constraint/i,"有欄位的內容超過限制（例如字數過長或數值超出範圍），請檢查後再送出。"],[/violates foreign key/i,"相關資料已不存在，可能已被刪除，請重新整理頁面。"],[/Failed to fetch|NetworkError|Load failed|network/i,"連線失敗，請檢查網路後再試。"],[/exceeded the maximum allowed size|Payload too large|too large/i,"檔案太大，請換一張小一點的照片。"],[/mime type|not supported/i,"檔案格式不支援，請改用一般的圖片檔（JPG 或 PNG）。"]];
+  for(const[x,t]of R)if(x.test(m))return t;
+  return "操作沒有成功，請稍後再試。（技術訊息："+m+"）";
+}
+
 const TURNSTILE_KEY="";let CFT="";const CF=()=>CFT||undefined;
 function cfInit(){if(!TURNSTILE_KEY||!document.getElementById("cf"))return;if(!window.turnstile)return setTimeout(cfInit,300);CFT="";turnstile.render("#cf",{sitekey:TURNSTILE_KEY,callback:t=>CFT=t})}
 function cfReset(){CFT="";if(window.turnstile&&TURNSTILE_KEY)try{turnstile.reset()}catch(e){}}
 if(TURNSTILE_KEY){const sc=document.createElement("script");sc.src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";document.head.appendChild(sc)}
 const AGES=["0–1 歲","1–2 歲","2–3 歲","3–4 歲","4–6 歲","6 歲以上"],TAGS=["5 分鐘內","安靜玩","室內","小空間","戶外","免準備","手作"];
 const REASONS=["廣告或商業推廣","照片涉及隱私或著作權","連結不適當","內容不完整","不適合該年齡","重複投稿","不當內容"];
-const S={u:null,me:null,games:[],likes:[],favs:[],played:[],q:"",age:-1,have:new Set(),tags:new Set(),sort:"new",fav:false};
+const S={u:null,me:null,games:[],likes:[],favs:[],played:[],q:"",ages:new Set(),have:new Set(),tags:new Set(),sort:"new",fav:false};
 const $=s=>document.querySelector(s),esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const pub=p=>sb.storage.from("photos").getPublicUrl(p).data.publicUrl;
 const cnt=(a,id)=>a.filter(x=>x.game_id===id).length,has=(a,id)=>S.u&&a.some(x=>x.game_id===id&&x.user_id===S.u.id);
 const nick=g=>g.profiles?.nickname||"家長";
 async function load(){
   const r=await Promise.all([sb.from("games").select("*,profiles!author_id(nickname)").order("created_at",{ascending:false}),sb.from("likes").select("*"),sb.from("favs").select("*"),sb.from("played").select("*")]);
-  const er=r.find(x=>x.error);if(er)alert("讀取資料失敗："+er.error.message);
+  const er=r.find(x=>x.error);if(er)alert("讀取資料失敗："+zh(er.error));
   [S.games,S.likes,S.favs,S.played]=r.map(x=>x.data||[]);
 }
 function pwBox(){modal(`<h3 style="margin-top:0">設定新密碼</h3><label>新密碼（至少 6 字）<input id="np" type="password"></label><div class="r"><button class="p" data-a="setpw">更新密碼</button></div><div class="mu" id="ae2"></div>`)}
 function nav(){
   $("#nav").innerHTML=`<button onclick="location.href='./'">首頁</button><button onclick="location.href='events.html'">親子活動</button>`+(S.u?`<button class="p" data-a="new">＋ 分享遊戲</button><button data-go="#/me">${esc(S.me?.nickname||"我的")}</button>${S.me?.is_admin?'<button data-go="#/admin">審核</button>':""}<button data-go="#/sheets">學習單</button><button data-a="out">登出</button>`:`<button data-go="#/sheets">學習單</button><button class="p" data-a="auth">登入／註冊</button>`);
 }
-function modal(h){$("#mb").innerHTML=h;$("#md").classList.add("s")}
+function modal(h){$("#mb").innerHTML='<button class="x" data-a="shut" aria-label="關閉">✕</button>'+h;$("#md").classList.add("s")}
 function shut(){$("#md").classList.remove("s")}
 const orgBlock=()=>{if(S.me?.account_type==="organization"){alert("商家與機構帳號僅能在「親子活動」發佈活動；遊戲區僅供家長非商業分享。");return true}return false};
 const need=()=>{if(!S.u){authBox();return false}if(S.me?.suspended){alert("你的帳號已被停權，無法使用此功能。如有疑問請來信 "+MAIL);return false}return true};
@@ -51,8 +62,8 @@ function authBox(reg){
   modal(`<h3 style="margin-top:0">${reg?"註冊":"登入"}</h3>${reg?'<div class="r" style="margin:6px 0 10px"><label style="margin:0"><input type="radio" name="at" value="personal" checked style="width:auto;margin:0 4px 0 0">個人家長</label><label style="margin:0"><input type="radio" name="at" value="organization" style="width:auto;margin:0 4px 0 0">商家／機構</label></div><label>暱稱或商家／機構名稱（2–30 字，之後無法修改）<input id="an" maxlength="30"></label><div id="orgx" style="display:none"><label>商家或機構簡介（10–200 字，會顯示在你的活動頁）<textarea id="ab" rows="3" maxlength="200"></textarea></label><label>官方網站（選填）<input id="aw" type="url" maxlength="200" placeholder="https://"></label></div>':""}<label>Email<input id="ae" type="email"></label><label>密碼（至少 6 字）<input id="ap" type="password"></label>${reg?'<input id="hp" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px"><label class="mu" style="display:block;margin-bottom:10px"><input type="checkbox" id="ag" style="width:auto;margin:0 6px 0 0">我已閱讀並同意<a href="#/terms" target="_blank">使用條款與免責聲明</a>及<a href="#/privacy" target="_blank">隱私權政策</a></label>':""}<div id="cf"></div><div class="r"><button class="p" data-a="${reg?"signup":"login"}">${reg?"註冊":"登入"}</button><button data-a="shut">取消</button><a data-a="${reg?"auth":"reg"}">${reg?"已有帳號？登入":"沒有帳號？註冊"}</a>${reg?"":'<a data-a="forgot">忘記密碼？</a>'}</div><div class="mu" id="ae2"></div>`);setTimeout(cfInit,50);document.querySelectorAll("[name=at]").forEach(r=>r.onchange=()=>{const o=$("#orgx");if(o)o.style.display=document.querySelector("[name=at]:checked").value==="organization"?"block":"none"});
 }
 const act={
-  shut,auth:()=>authBox(),reg:()=>authBox(true),
-  async login(){const{error}=await sb.auth.signInWithPassword({email:$("#ae").value.trim(),password:$("#ap").value,options:{captchaToken:CF()}});if(error){$("#ae2").textContent="登入失敗：Email 或密碼不正確。";cfReset()}else shut()},
+  shut(){if($("#ft")&&($("#ft").value.trim()||($("#fh")&&$("#fh").value.trim()))&&!confirm("尚未送出的內容會消失，確定要關閉嗎？"))return;shut()},auth:()=>authBox(),reg:()=>authBox(true),
+  async login(){const{error}=await sb.auth.signInWithPassword({email:$("#ae").value.trim(),password:$("#ap").value,options:{captchaToken:CF()}});if(error){$("#ae2").textContent="登入失敗："+zh(error);cfReset()}else shut()},
   async signup(){
     if($("#hp")&&$("#hp").value)return;if(!$("#ag").checked)return $("#ae2").textContent="請先勾選同意使用條款與隱私權政策。";
     const n=$("#an").value.trim();if(n.length<2)return $("#ae2").textContent="暱稱至少 2 個字。";
@@ -60,19 +71,19 @@ const act={
     if(at==="organization"){bio=$("#ab").value.trim();web=$("#aw").value.trim();if(bio.length<10)return $("#ae2").textContent="請填寫商家或機構簡介（至少 10 字）。";if(web&&!/^https?:\/\/[^\s]+$/i.test(web))return $("#ae2").textContent="官方網站需以 http:// 或 https:// 開頭。"}
     const{data:ex}=await sb.from("profiles").select("id").eq("nickname",n);if(ex&&ex.length)return $("#ae2").textContent="這個暱稱已被使用。";
     const{error}=await sb.auth.signUp({email:$("#ae").value.trim(),password:$("#ap").value,options:{data:{nickname:n,account_type:at,bio,website:web},captchaToken:CF()}});
-    if(error){$("#ae2").textContent="註冊失敗："+error.message;cfReset()}else{$("#ae2").textContent="註冊成功！若沒有自動登入，請到信箱點確認信。"}
+    if(error){$("#ae2").textContent="註冊失敗："+zh(error);cfReset()}else{$("#ae2").textContent="註冊成功！若沒有自動登入，請到信箱點確認信。"}
   },
   async out(){await sb.auth.signOut();location.hash="#/"},
   new:()=>need()&&!orgBlock()&&form(),
   async toggle(el){if(!need())return;const t=el.dataset.t,id=el.dataset.id,on=has(S[t],id);
     const q=on?sb.from(t).delete().match({game_id:id,user_id:S.u.id}):sb.from(t).insert({game_id:id,user_id:S.u.id});
-    const{error}=await q;if(error)return alert(error.message);await load();route()},
+    const{error}=await q;if(error)return alert(zh(error));await load();route()},
   async share(){try{await navigator.clipboard.writeText(location.href);alert("連結已複製")}catch(e){prompt("複製這個連結",location.href)}},
   async report(el){if(!need())return;const r=prompt("請簡述檢舉原因（200 字內）");if(!r)return;
     const row={user_id:S.u.id,reason:r.slice(0,200)};row[el.dataset.k]=el.dataset.id;
-    const{error}=await sb.from("reports").insert(row);alert(error?error.message:"已送出檢舉，感謝你")},
+    const{error}=await sb.from("reports").insert(row);alert(error?zh(error):"已送出檢舉，感謝你")},
   async cm(el){if(!need()||orgBlock())return;const v=$("#cin").value.trim();if(!v)return;
-    const{error}=await sb.from("comments").insert({game_id:el.dataset.id,user_id:S.u.id,body:v.slice(0,300)});if(error)return alert(error.message);route()},
+    const{error}=await sb.from("comments").insert({game_id:el.dataset.id,user_id:S.u.id,body:v.slice(0,300)});if(error)return alert(zh(error));route()},
   async delcm(el){if(!confirm("刪除這則留言？"))return;await sb.from("comments").delete().eq("id",el.dataset.id);route()},
   async delgame(el){if(!confirm("確定刪除這個遊戲？"))return;const g=S.games.find(x=>x.id===el.dataset.id);
     if(g.photos.length)await sb.storage.from("photos").remove(g.photos);await sb.from("games").delete().eq("id",g.id);await load();location.hash="#/"},
@@ -83,30 +94,29 @@ const act={
     if(g.photos.length)await sb.storage.from("photos").remove(g.photos);
     await sb.from("games").update({status:"rejected",reject_reason:el.dataset.r,photos:[]}).eq("id",g.id);await load();route()},
   async delrep(el){await sb.from("reports").delete().eq("id",el.dataset.id);route()},
-  chip(el){const k=el.dataset.k,v=el.dataset.v;if(k==="age")S.age=+v;else if(k==="sort")S.sort=v;else if(k==="fav")S.fav=!S.fav;else{const s=S[k];s.has(v)?s.delete(v):s.add(v)}home()},
+  chip(el){const k=el.dataset.k,v=el.dataset.v;if(k==="age"){const n=+v;n<0?S.ages.clear():(S.ages.has(n)?S.ages.delete(n):S.ages.add(n))}else if(k==="sort")S.sort=v;else if(k==="fav")S.fav=!S.fav;else{const s=S[k];s.has(v)?s.delete(v):s.add(v)}home()},
   clr(){S.have.clear();home()},
   async forgot(){const em=$("#ae").value.trim();if(!em)return $("#ae2").textContent="請先在上面填入 Email。";
     const{error}=await sb.auth.resetPasswordForEmail(em,{redirectTo:location.href.split("#")[0],captchaToken:CF()});cfReset();
-    $("#ae2").textContent=error?"寄送失敗："+error.message:"如果這個 Email 已註冊，重設密碼信已寄出，請到信箱查看（也看一下垃圾信件匣）。"},
+    $("#ae2").textContent=error?"寄送失敗："+zh(error):"如果這個 Email 已註冊，重設密碼信已寄出，請到信箱查看（也看一下垃圾信件匣）。"},
   async setpw(){const p=$("#np").value;if(p.length<6)return $("#ae2").textContent="密碼至少 6 字。";
-    const{error}=await sb.auth.updateUser({password:p});if(error)return $("#ae2").textContent="更新失敗："+error.message;shut();alert("密碼已更新。");location.hash="#/"},
+    const{error}=await sb.auth.updateUser({password:p});if(error)return $("#ae2").textContent="更新失敗："+zh(error);shut();alert("密碼已更新。");location.hash="#/"},
   async sus(el){if(!confirm("確定停權這位作者？他公開的遊戲與留言會被隱藏，也無法再投稿或留言。"))return;
-    const{error}=await sb.from("profiles").update({suspended:true}).eq("id",el.dataset.id);if(error)return alert(error.message);await load();route()},
-  async unsus(el){const{error}=await sb.from("profiles").update({suspended:false}).eq("id",el.dataset.id);if(error)return alert(error.message);await load();route()},
+    const{error}=await sb.from("profiles").update({suspended:true}).eq("id",el.dataset.id);if(error)return alert(zh(error));await load();route()},
+  async unsus(el){const{error}=await sb.from("profiles").update({suspended:false}).eq("id",el.dataset.id);if(error)return alert(zh(error));await load();route()},
   async delacc(){if(prompt("刪除帳號會一併刪除你的所有投稿、照片、留言與收藏，無法復原。\n確定請輸入「刪除」")!=="刪除")return;
     const{data:evp}=await sb.from("events").select("photo").eq("author_id",S.u.id);const ph=S.games.filter(g=>g.author_id===S.u.id).flatMap(g=>g.photos).concat((evp||[]).map(x=>x.photo).filter(Boolean));if(ph.length)await sb.storage.from("photos").remove(ph);
-    const{error}=await sb.rpc("delete_my_account");if(error)return alert("刪除失敗："+error.message);
+    const{error}=await sb.rpc("delete_my_account");if(error)return alert("刪除失敗："+zh(error));
     try{await sb.auth.signOut()}catch(e){}alert("帳號已刪除。");location.hash="#/"}
 };
 document.addEventListener("click",e=>{
   const g=e.target.closest("[data-go]");if(g){location.hash=g.dataset.go;shut();return}
-  const a=e.target.closest("[data-a]");if(a){const f=act[a.dataset.a];f&&Promise.resolve(f(a)).catch(x=>alert(x.message||x));return}
-  if(e.target===$("#md"))shut();
+  const a=e.target.closest("[data-a]");if(a){const f=act[a.dataset.a];f&&Promise.resolve(f(a)).catch(x=>alertzh(x));return}
 });
 function list(){
   const q=S.q.trim().toLowerCase(),h=S.have;
   let l=S.games.filter(g=>g.status==="approved").map(g=>({g,miss:g.materials.filter(m=>!h.has(m)).length,ov:g.materials.filter(m=>h.has(m)).length}));
-  l=l.filter(({g,ov})=>(S.age<0||g.age===S.age)&&(!S.fav||has(S.favs,g.id))&&[...S.tags].every(t=>g.tags.includes(t))&&(!q||(g.title+g.how+g.materials.join(" ")).toLowerCase().includes(q))&&(!h.size||ov>0||!g.materials.length));
+  l=l.filter(({g,ov})=>(S.ages.size===0||S.ages.has(g.age))&&(!S.fav||has(S.favs,g.id))&&[...S.tags].every(t=>g.tags.includes(t))&&(!q||(g.title+g.how+g.materials.join(" ")).toLowerCase().includes(q))&&(!h.size||ov>0||!g.materials.length));
   const k={new:g=>Date.parse(g.created_at),likes:g=>cnt(S.likes,g.id),favs:g=>cnt(S.favs,g.id)}[S.sort];
   return l.sort((a,b)=>(h.size?a.miss-b.miss:0)||k(b.g)-k(a.g));
 }
@@ -122,7 +132,7 @@ function home(){
   <section class="hero"><div class="hero-copy"><div class="eyebrow">IDEAS TOGETHER · 親子靈感共享</div><h2>育兒的好點子，<em>一起分享。</em></h2><p>找遊戲、學方法、分享你的育兒日常。每個家庭的小點子，都可能成為另一個家庭的大幫助。</p><div class="hero-actions"><button class="p" data-a="new">＋ 分享我的點子</button><button data-a="rand">🎲 今天玩什麼？</button></div></div></section>
   <div class="section-head"><div><h2>找一個今天就能玩的點子</h2><p>依孩子年齡、遊戲類型或家裡現有材料來探索。</p></div><div class="count-line">目前收集 ${published} 個遊戲點子</div></div>
   <section class="filter-panel"><div class="search-wrap"><input id="q" placeholder="搜尋遊戲名稱、玩法或材料…" value="${esc(S.q)}"></div>
-  <div class="filter-label">孩子的年齡</div><div class="filter-row">${B("age",-1,"不限年齡",S.age<0)}${AGES.map((a,i)=>B("age",i,a,S.age===i)).join("")}</div>
+  <div class="filter-label">孩子的年齡</div><div class="filter-row">${B("age",-1,"不限年齡",S.ages.size===0)}${AGES.map((a,i)=>B("age",i,a,S.ages.has(i))).join("")}</div>
   <div class="filter-label">想玩哪一種？</div><div class="filter-row">${TAGS.map(t=>B("tags",t,t,S.tags.has(t))).join("")}</div>
   ${ms.length?`<div class="filter-label">我家有這些材料</div><div class="filter-row">${ms.map(m=>B("have",m,m,S.have.has(m))).join("")}${S.have.size?'<button data-a="clr">清除材料</button>':""}</div>`:""}
   <div class="filter-footer"><div class="r"><span class="mu">排序</span>${B("sort","new","最新分享",S.sort==="new")}${B("sort","likes","最多按讚",S.sort==="likes")}${B("sort","favs","最多收藏",S.sort==="favs")}${B("fav",1,"只看我的收藏",S.fav)}</div><div id="result-count" class="count-line"></div></div></section>
@@ -199,7 +209,7 @@ async function submit(g){
     const row={title:t,how:h,age:+$("#fa").value,materials:m,tags:[...document.querySelectorAll(".ftag:checked")].map(x=>x.value),photos,link:lk||null,status:"pending",reject_reason:null};
     const{error}=g?await sb.from("games").update(row).eq("id",g.id):await sb.from("games").insert({...row,author_id:S.u.id});
     if(error)throw error;await load();shut();alert("已送出，審核通過後就會公開。");location.hash="#/me";route();
-  }catch(x){e.textContent="送出失敗："+(x.message||x);$("#fs").disabled=false}
+  }catch(x){e.textContent="送出失敗："+zh(x);$("#fs").disabled=false}
 }
 function sheets(){$("#app").innerHTML=`<p><a data-go="#/">← 返回</a></p><h2>學習單</h2><div class="empty-state"><strong>📄 學習單區準備中</strong>之後這裡會放可以下載列印的親子學習單，敬請期待。</div>`}
 const DOCS={
