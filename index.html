@@ -33,11 +33,20 @@ input[type=date],input[type=time]{-webkit-appearance:none;appearance:none}
  .mb .r .kopt{flex:none}
 }
 @media(max-width:380px){body nav #nav button:not(.ic){max-width:78px}}
+
+/* 2026 UX improvements */
+.toast{position:fixed;left:50%;bottom:24px;transform:translate(-50%,18px);opacity:0;pointer-events:none;z-index:100;background:var(--tx);color:var(--card);padding:12px 18px;border-radius:14px;box-shadow:var(--shadow);max-width:min(92vw,520px);font-size:14px;transition:opacity .2s,transform .2s}.toast.show{opacity:1;transform:translate(-50%,0)}
+.draft-note{background:var(--ac2);color:var(--ac-dark);padding:10px 13px;border-radius:12px;font-size:13px;margin:8px 0 14px}
+.home-feed{margin:26px 0}.home-feed-head{display:flex;align-items:end;justify-content:space-between;gap:12px;margin:0 0 10px}.home-feed-head h3{margin:0;font-size:21px}.home-feed-head a{font-size:13px;font-weight:700}.home-mini-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.home-mini-grid .c{min-width:0}.home-mini-grid .ev{margin:0;height:100%}.home-welcome{padding:22px 24px;background:var(--card);border:1px solid var(--bd);border-radius:20px;margin:18px 0}.home-welcome p{margin:4px 0;color:var(--mu);font-size:14px}.home-feed-empty{padding:16px;border:1px dashed var(--bd);border-radius:14px;color:var(--mu);font-size:14px}
+.view-meta{font-size:12px;color:var(--mu);margin-top:5px}.notice-banner{background:var(--ac2);border:1px solid var(--bd);color:var(--ac-dark);border-radius:14px;padding:13px 16px;margin:0 0 16px;font-size:14px}
+.filter-chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}.filter-chips span{background:var(--tg);border-radius:999px;padding:4px 10px;font-size:12px;color:var(--mu)}
+@media(max-width:760px){.home-mini-grid{grid-template-columns:1fr 1fr}.home-mini-grid .c:last-child:nth-child(odd){display:none}.home-feed-head h3{font-size:19px}.toast{bottom:calc(16px + env(safe-area-inset-bottom))}.mb{padding:17px}}
+@media(max-width:430px){.home-mini-grid{grid-template-columns:1fr}.home-mini-grid .c:last-child:nth-child(odd){display:block}.home-feed-head{align-items:center}}
 </style></head><body>
 <div class="w"><nav><a class="brand" href="#/"><h1>點子共玩所<small>Ideas together</small></h1></a><div class="r" id="nav"></div><div class="tag">交換遊戲靈感，玩出親子生活的無限可能</div></nav>
 <div id="app"></div>
 <footer class="ft"><a data-go="#/terms">使用條款與免責聲明</a><a data-go="#/privacy">隱私權政策</a><a data-go="#/copyright">著作權與下架申請</a><span>聯絡：ideastogether2026@gmail.com</span></footer></div>
-<div class="m" id="md"><div class="mb" id="mb"></div></div>
+<div class="m" id="md"><div class="mb" id="mb"></div></div><div id="toast" class="toast" role="status" aria-live="polite"></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script>
 const SB_URL="https://impuxatitpghslleasma.supabase.co",SB_KEY="sb_publishable_bufFrNEhfUMxuwNmFOosRg_rPiekiNf";
@@ -65,6 +74,36 @@ const go=h=>{if(location.hash===h)ROUTE();else location.hash=h};
 const afterDel=h=>location.hash.startsWith("#/account")?ROUTE(true):go(h);
 const pub=p=>sb.storage.from("photos").getPublicUrl(p).data.publicUrl;
 const lhost=u=>{try{return new URL(u).hostname}catch(x){return u}};
+let toastTimer=null;
+function showToast(message){const el=$("#toast");if(!el)return;el.textContent=message;el.classList.add("show");clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove("show"),4200)}
+function draftKey(type){return "ideas_together_draft_v1_"+(AUTH.u?.id||"guest")+"_"+type}
+function draftSnapshot(type,extra={}){
+  const fields=[...document.querySelectorAll("#mb input, #mb textarea, #mb select")].filter(x=>x.type!=="file").map(x=>({id:x.id||"",name:x.name||"",type:x.type||"",value:x.value,checked:!!x.checked}));
+  return{type,updatedAt:new Date().toISOString(),fields,...extra};
+}
+function saveDraft(type,extra={}){try{localStorage.setItem(draftKey(type),JSON.stringify(draftSnapshot(type,extra)));showToast("草稿已儲存在這台裝置");return true}catch(e){showToast("無法儲存草稿，請確認瀏覽器儲存空間設定");return false}}
+function readDraft(type){try{return JSON.parse(localStorage.getItem(draftKey(type))||"null")}catch(e){return null}}
+function clearDraft(type){try{localStorage.removeItem(draftKey(type))}catch(e){}}
+function restoreDraftFields(d){(d?.fields||[]).forEach(f=>{let el=f.id?document.getElementById(f.id):null;if(!el&&f.name)el=[...document.querySelectorAll("#mb [name]")].find(x=>x.name===f.name&&x.type===f.type&&(f.type==="radio"||f.type==="checkbox"?x.value===f.value:true));if(!el)return;if(el.type==="checkbox"||el.type==="radio")el.checked=f.checked;else el.value=f.value??""})}
+function bindDraft(type,extraFn=()=>({}),afterRestore=()=>{}){
+  const old=readDraft(type);if(old&&confirm("找到上次未完成的投稿草稿，要載入嗎？")){if(type==="event"){FD=old.FD||[];FS=old.FS||[]}restoreDraftFields(old);afterRestore(old)}
+  const box=$("#mb");if(!box)return;let timer;
+  const autosave=()=>{clearTimeout(timer);timer=setTimeout(()=>{try{localStorage.setItem(draftKey(type),JSON.stringify(draftSnapshot(type,extraFn())))}catch(e){}},500)};
+  box.addEventListener("input",autosave);box.addEventListener("change",autosave);box.addEventListener("click",e=>{if(e.target.closest("[data-a]"))autosave()});
+}
+function submissionSuccess(type){clearDraft(type);const msg=type==="game"?"遊戲投稿已送出，審核通過後就會公開。":"活動投稿已送出，審核通過後就會公開。";try{sessionStorage.setItem("ideas_submission_notice",msg)}catch(e){}shut();go("#/account");showToast(msg)}
+function visitorId(){try{let id=localStorage.getItem("ideas_visitor_id");if(!id){id=crypto.randomUUID();localStorage.setItem("ideas_visitor_id",id)}return id}catch(e){return "visitor-"+Math.random().toString(36).slice(2)+Date.now()}}
+async function trackView(type,id,item){
+  if(!item||item.status!=="approved")return Number(item?.view_count||0);
+  const day=new Date().toISOString().slice(0,10),key=`ideas_view_${day}_${type}_${id}`;
+  try{if(localStorage.getItem(key))return Number(item.view_count||0)}catch(e){}
+  try{
+    const{data,error}=await sb.rpc("increment_content_view",{p_type:type,p_content_id:id,p_visitor_key:visitorId()});
+    if(error)throw error;
+    try{localStorage.setItem(key,"1")}catch(e){}
+    const n=Number(data);item.view_count=Number.isFinite(n)?n:Number(item.view_count||0)+1;return item.view_count;
+  }catch(e){console.warn("瀏覽數功能尚未啟用，請先執行附上的 Supabase SQL。",e);return Number(item.view_count||0)}
+}
 async function shrink(f){
   const bm=await createImageBitmap(f),k=Math.min(1,900/Math.max(bm.width,bm.height)),c=document.createElement("canvas");
   c.width=Math.round(bm.width*k);c.height=Math.round(bm.height*k);c.getContext("2d").drawImage(bm,0,0,c.width,c.height);
@@ -84,7 +123,7 @@ function nav(){
   const mi=`<button data-go="#/events">找親子活動</button><button data-go="#/games">找遊戲</button>`+(AUTH.u?`<button data-go="#/account">我的帳號</button>`:"")+(AUTH.me?.is_admin?`<button data-go="#/admin">審核</button>`:"")+(AUTH.u?`<hr><button data-a="out">登出</button>`:"");
   $("#nav").innerHTML=`<button data-go="#/">首頁</button>${acct}<span class="mwrap"><button class="ic" data-a="menu" aria-label="選單" aria-expanded="false">${MENU_ICON}</button><div class="menu" id="menu">${mi}</div></span>`;
 }
-ACT.shut=()=>{if($("#ft")&&($("#ft").value.trim()||($("#fh")&&$("#fh").value.trim()))&&!confirm("尚未送出的內容會消失，確定要關閉嗎？"))return;shut()};
+ACT.shut=()=>{if($("#ft")&&($("#ft").value.trim()||($("#fh")&&$("#fh").value.trim()))&&!confirm("未送出的內容會自動儲存為草稿（照片需重新選取），確定要關閉嗎？"))return;shut()};
 ACT.auth=()=>authBox();ACT.reg=()=>authBox(true);
 ACT.menu=el=>{const mn=$("#menu");if(!mn)return;const o=mn.classList.toggle("s");el.setAttribute("aria-expanded",o)};
 (()=>{const act={
@@ -108,7 +147,7 @@ ACT.menu=el=>{const mn=$("#menu");if(!mn)return;const o=mn.classList.toggle("s")
 const G=(()=>{
 let T=0;
 function route(){return ROUTE(true)}
-const AGES=["0–1 歲","1–2 歲","2–3 歲","3–4 歲","4–6 歲","6 歲以上"],TAGS=["5 分鐘內","安靜玩","室內","小空間","戶外","免準備","手作"];
+const AGES=["0–1 歲","1–2 歲","2–3 歲","3–4 歲","4–6 歲","6 歲以上"],DURATIONS=["5 分鐘內","5–15 分鐘","15–30 分鐘","30 分鐘以上"],TAGS=["5 分鐘內","安靜玩","室內","小空間","戶外","免準備","手作"];
 const REASONS=["廣告或商業推廣","照片涉及隱私或著作權","連結不適當","內容不完整","不適合該年齡","重複投稿","不當內容"];
 const S={get u(){return AUTH.u},get me(){return AUTH.me},games:[],likes:[],favs:[],played:[],q:"",ages:new Set(),have:new Set(),tags:new Set(),sort:"new",fav:false};
 const cnt=(a,id)=>a.filter(x=>x.game_id===id).length,has=(a,id)=>S.u&&a.some(x=>x.game_id===id&&x.user_id===S.u.id);
@@ -121,7 +160,7 @@ async function load(){
 const orgBlock=()=>{if(S.me?.account_type==="organization"){alert("商家與機構帳號僅能在「親子活動」發佈活動；遊戲區僅供家長非商業分享。");return true}return false};
 const act={
   menu(el){const mn=$("#menu");if(!mn)return;const o=mn.classList.toggle("s");el.setAttribute("aria-expanded",o)},
-  shut(){if($("#ft")&&($("#ft").value.trim()||($("#fh")&&$("#fh").value.trim()))&&!confirm("尚未送出的內容會消失，確定要關閉嗎？"))return;shut()},auth:()=>authBox(),reg:()=>authBox(true),
+  shut(){if($("#ft")&&($("#ft").value.trim()||($("#fh")&&$("#fh").value.trim()))&&!confirm("未送出的內容會自動儲存為草稿（照片需重新選取），確定要關閉嗎？"))return;shut()},auth:()=>authBox(),reg:()=>authBox(true),
   async login(){const{error}=await sb.auth.signInWithPassword({email:$("#ae").value.trim(),password:$("#ap").value,options:{captchaToken:CF()}});if(error){$("#ae2").textContent="登入失敗："+zh(error);cfReset()}else shut()},
   async signup(){
     if($("#hp")&&$("#hp").value)return;if(!$("#ag").checked)return $("#ae2").textContent="請先勾選同意使用條款與隱私權政策。";
@@ -177,7 +216,7 @@ function list(){
 }
 function card({g,miss}){
   const hv=S.have.size?`<span class="t ok">${miss?"還缺 "+miss+" 樣":"材料齊全"}</span>`:"";
-  return `<article class="c" data-go="#/games/g/${g.id}"><div class="ph">${g.photos[0]?`<img loading="lazy" src="${pub(g.photos[0])}" alt="${esc(g.title)}" onerror="this.style.display='none'">`:""}</div><div class="cb"><div><span class="t ag">${AGES[g.age]}</span>${hv}</div><b>${esc(g.title)}</b><div class="mu">♥ ${cnt(S.likes,g.id)}　★ ${cnt(S.favs,g.id)}　·　${g.materials.length?`材料 ${g.materials.length} 種`:"免材料"}</div><div style="margin-top:6px">${g.materials.slice(0,2).map(m=>`<span class="t">${esc(m)}</span>`).join("")}${g.materials.length>2?`<span class="t">＋${g.materials.length-2}</span>`:""}</div></div></article>`;
+  return `<article class="c" data-go="#/games/g/${g.id}"><div class="ph">${g.photos[0]?`<img loading="lazy" src="${pub(g.photos[0])}" alt="${esc(g.title)}" onerror="this.style.display='none'">`:""}</div><div class="cb"><div><span class="t ag">${AGES[g.age]}</span>${g.duration_label?`<span class="t">${esc(g.duration_label)}</span>`:""}${hv}</div><b>${esc(g.title)}</b><div class="mu">♥ ${cnt(S.likes,g.id)}　★ ${cnt(S.favs,g.id)}　·　${g.materials.length?`材料 ${g.materials.length} 種`:"免材料"}　·　瀏覽 ${Number(g.view_count||0)}</div><div style="margin-top:6px">${g.materials.slice(0,2).map(m=>`<span class="t">${esc(m)}</span>`).join("")}${g.materials.length>2?`<span class="t">＋${g.materials.length-2}</span>`:""}</div></div></article>`;
 }
 function home(){
   const cn={};S.games.filter(g=>g.status==="approved").forEach(g=>g.materials.forEach(m=>cn[m]=(cn[m]||0)+1));
@@ -197,13 +236,15 @@ function home(){
 function draw(){const l=list();const rc=$("#result-count");if(rc)rc.textContent=`找到 ${l.length} 個點子`;$("#gl").innerHTML=l.length?`<div class="g">${l.map(card).join("")}</div>`:`<div class="empty-state"><strong>${S.games.length?"還沒找到符合條件的點子":"這裡還在等待第一個好點子"}</strong>${S.games.length?"試著調整年齡、材料或搜尋關鍵字。":"分享你家的第一個遊戲，讓更多爸媽一起受惠。"}<div style="margin-top:14px"><button class="p" data-a="g.new">＋ 分享一個遊戲</button></div></div>`}
 async function detail(id){
   const g=S.games.find(x=>x.id===id);if(!g){$("#app").innerHTML="<p>找不到這個遊戲，可能還在審核中或已被刪除。</p>";return}
+  const views=await trackView("game",id,g);
   const{data:cs}=await sb.from("comments").select("*,profiles!user_id(nickname)").eq("game_id",id).order("created_at");
   const mine=S.u&&g.author_id===S.u.id,B=(t,l)=>`<button data-a="g.toggle" data-t="${t}" data-id="${id}" class="${has(S[t],id)?"on":""}">${l}</button>`;
   $("#app").innerHTML=`<p><a data-go="#/games">← 返回</a></p><h2 style="margin:0">${esc(g.title)}</h2>
   ${g.status!=="approved"?`<p class="rule">${g.status==="pending"?"審核中，目前只有你和管理員看得到。":"已被退回："+esc(g.reject_reason)+"。修改後可重新送審。"}</p>`:""}
   ${g.photos.length?`<div class="pics">${g.photos.map(p=>`<a href="${pub(p)}" target="_blank"><img src="${pub(p)}" alt=""></a>`).join("")}</div>`:""}
-  <p class="mu"><span class="t ag">${AGES[g.age]}</span> 作者：<a data-go="#/games/by/${g.author_id}">${esc(nick(g))}</a> · ${cnt(S.played,id)} 個家庭玩過</p>
+  <p class="mu"><span class="t ag">${AGES[g.age]}</span> 作者：<a data-go="#/games/by/${g.author_id}">${esc(nick(g))}</a> · ${cnt(S.played,id)} 個家庭玩過 · 瀏覽 ${views}</p>
   <div>${g.tags.map(t=>`<span class="t ok">${esc(t)}</span>`).join("")}</div>
+  <p><b>大約遊玩時間</b><br>${g.duration_label?esc(g.duration_label):"尚未標示"}</p>
   <p><b>需要的材料</b><br>${g.materials.length?g.materials.map(m=>`<span class="t">${esc(m)}</span>`).join(""):'<span class="mu">不需要特別材料</span>'}</p>
   <p><b>怎麼玩</b><br>${esc(g.how).replace(/\n/g,"<br>")}</p>
   ${g.link?`<p><b>相關連結</b><br><a href="${esc(g.link)}" target="_blank" rel="noopener noreferrer nofollow ugc">${esc(lhost(g.link))} ↗</a> <span class="mu">（外部連結，請自行留意）</span></p>`:""}
@@ -219,15 +260,18 @@ function author(id){
 function form(g){
   modal(`<h3 style="margin-top:0">${g?"編輯遊戲":"分享一個遊戲"}</h3>
   <div class="rule"><b>投稿規則</b><ul><li>本站僅供非商業分享：禁止廣告、推銷、團購、導購連結與業配</li><li>可以提到遊戲或桌遊的名稱，但請以玩法為主，不附購買連結、不推薦店家</li><li>桌遊等有版權的規則請用自己的話改寫，不要整段複製</li><li>照片請遵守隱私及著作權</li><li>名稱 20 字內，玩法 500 字內，材料最多 10 項</li><li>照片最多 3 張，每張原檔 8 MB 內（上傳時會自動壓縮）</li><li>內容須為原創或親身玩過，並適合孩子的年齡；遊戲安全請家長自行評估</li><li>相關連結同樣需通過審核</li><li>送出後需經審核才會公開${g?"（編輯後也會重新審核）":""}</li></ul></div>
-  <label>遊戲名稱<input id="ft" maxlength="20" value="${esc(g?.title)}"></label>
+  <label>遊戲名稱<input id="ft" maxlength="20" placeholder="例如：彩色毛球夾夾樂" value="${esc(g?.title)}"></label><p class="mu" style="margin:-8px 0 10px">用簡單的名稱描述活動，讓其他家長一眼看懂。</p>
   <label>適合年齡<select id="fa">${AGES.map((a,i)=>`<option value="${i}" ${g?.age===i?"selected":""}>${a}</option>`).join("")}</select></label>
+  <label>大約遊玩時間<select id="fdur"><option value="">請選擇（選填）</option>${DURATIONS.map(x=>`<option value="${x}" ${g?.duration_label===x?"selected":""}>${x}</option>`).join("")}</select></label>
   <label>需要的材料（用頓號分隔，例如：紙箱、膠帶）<input id="fm" value="${esc(g?.materials.join("、"))}"></label>
   <div class="r">${TAGS.map(t=>`<label><input type="checkbox" class="ftag" value="${t}" ${g?.tags.includes(t)?"checked":""} style="width:auto;margin:0"> ${t}</label>`).join(" ")}</div>
-  <label>怎麼玩<textarea id="fh" rows="5" maxlength="500">${esc(g?.how)}</textarea></label>
+  <label>怎麼玩<textarea id="fh" rows="5" maxlength="500" placeholder="可以寫孩子怎麼玩、你怎麼引導，以及孩子的反應。">${esc(g?.how)}</textarea></label><p class="mu" style="margin:-8px 0 10px">不需要寫得像教案，照平常分享的方式描述即可。</p>
   <label>相關連結（選填，例如影片或你的分享頁；需經審核）<input id="fl" type="url" maxlength="200" placeholder="https://" value="${esc(g?.link)}"></label>
   <label>照片（最多 3 張${g?"；不選就保留原本的照片，選了會全部取代":""}）<input id="fp" type="file" accept="image/*" multiple></label>
-  <div class="r"><button class="p" id="fs">${g?"儲存並重新送審":"送出審核"}</button><button data-a="shut">取消</button></div><div class="mu" id="fe"></div>`);
+  <div class="draft-note">草稿會自動保存在目前這台裝置；照片需在正式送出時重新選取。</div><div class="r"><button id="save-game-draft">儲存草稿</button><button class="p" id="fs">${g?"儲存並重新送審":"送出審核"}</button><button data-a="shut">關閉</button></div><div class="mu" id="fe"></div>`);
   $("#fs").onclick=()=>submit(g);
+  $("#save-game-draft").onclick=()=>saveDraft("game");
+  bindDraft("game");
 }
 async function submit(g){
   const e=$("#fe"),t=$("#ft").value.trim(),h=$("#fh").value.trim(),fs=[...$("#fp").files];
@@ -242,9 +286,9 @@ async function submit(g){
     let photos=g?.photos||[];
     if(fs.length){const up=[];for(const f of fs){const p=S.u.id+"/"+crypto.randomUUID()+".webp";const{error}=await sb.storage.from("photos").upload(p,await shrink(f),{contentType:"image/webp"});if(error)throw error;up.push(p)}
       if(g?.photos.length)await sb.storage.from("photos").remove(g.photos);photos=up}
-    const row={title:t,how:h,age:+$("#fa").value,materials:m,tags:[...document.querySelectorAll(".ftag:checked")].map(x=>x.value),photos,link:lk||null,status:"pending",reject_reason:null};
+    const row={title:t,how:h,age:+$("#fa").value,duration_label:$("#fdur").value||null,materials:m,tags:[...document.querySelectorAll(".ftag:checked")].map(x=>x.value),photos,link:lk||null,status:"pending",reject_reason:null};
     const{error}=g?await sb.from("games").update(row).eq("id",g.id):await sb.from("games").insert({...row,author_id:S.u.id});
-    if(error)throw error;await load();shut();alert("已送出，審核通過後就會公開。");go("#/account");
+    if(error)throw error;await load();submissionSuccess("game");
   }catch(x){e.textContent="送出失敗："+zh(x);$("#fs").disabled=false}
 }
 
@@ -253,7 +297,7 @@ async function ensure(){if(Date.now()-T>60000)await load()}
 async function show(sub,id){await ensure();if(sub==="g")await detail(id);else if(sub==="by")author(id);else home()}
 const SKIP=new Set(["menu","shut","auth","reg","login","signup","forgot","setpw","out","delacc","sus","unsus","delrep"]);
 Object.keys(act).forEach(k=>{if(!SKIP.has(k))ACT["g."+k]=act[k]});
-return{S,ensure,reset,show,openNew:()=>act.new(),AGES,REASONS,nick,load};
+return{S,ensure,reset,show,openNew:()=>act.new(),AGES,REASONS,nick,load,card};
 })();
 const E=(()=>{
 let T=0;
@@ -276,6 +320,7 @@ const TOD={am:[0,12],pm:[12,18],ev:[18,24]};
 const todR=e=>{if(e.flex_time||e.continuous)return[0,24];const s=new Date(e.start_at),a=s.getHours()+s.getMinutes()/60;let b=a+.01;if(e.end_at){const n=new Date(e.end_at);b=n.getHours()+n.getMinutes()/60;if(b<=a)b=24}return[a,b]};
 const hh=t=>{const[a,b]=t.split(":");return +a+ +b/60};
 const todRs=e=>{if(e.flex_time||e.continuous)return[[0,24]];if(e.schedule&&e.schedule.length)return e.schedule.map(x=>{const a=hh(x.s);let b=x.e?hh(x.e):a+.01;if(b<=a)b=24;return[a,b]});return[todR(e)]};
+const nextEventDate=e=>{const now=d0(new Date());const upcoming=daysOf(e).filter(d=>d0(d)>=now).sort((a,b)=>a-b);return (upcoming[0]||new Date(e.start_at)).getTime()};
 const sk=e=>{if(e.flex_time||e.continuous)return 99;if(e.schedule&&e.schedule.length){const x=e.schedule.find(y=>y.d===S.day)||e.schedule[0];return hh(x.s)}return todR(e)[0]};
 const isOrg=e=>e.profiles?.account_type==="organization";
 const hm=d=>d.toLocaleTimeString("zh-TW",{hour:"2-digit",minute:"2-digit",hour12:false});
@@ -303,7 +348,7 @@ async function load(){
 const cntE=(a,id)=>a.filter(x=>x.event_id===id).length,hasE=(a,id)=>S.u&&a.some(x=>x.event_id===id&&x.user_id===S.u.id);
 const act={
   menu(el){const mn=$("#menu");if(!mn)return;const o=mn.classList.toggle("s");el.setAttribute("aria-expanded",o)},
-  shut(){if($("#ft")&&($("#ft").value.trim()||($("#fh")&&$("#fh").value.trim()))&&!confirm("尚未送出的內容會消失，確定要關閉嗎？"))return;shut()},auth:()=>authBox(),reg:()=>authBox(true),
+  shut(){if($("#ft")&&($("#ft").value.trim()||($("#fh")&&$("#fh").value.trim()))&&!confirm("未送出的內容會自動儲存為草稿（照片需重新選取），確定要關閉嗎？"))return;shut()},auth:()=>authBox(),reg:()=>authBox(true),
   async login(){const{error}=await sb.auth.signInWithPassword({email:$("#ae").value.trim(),password:$("#ap").value,options:{captchaToken:CF()}});if(error){$("#ae2").textContent="登入失敗："+zh(error);cfReset()}else shut()},
   async signup(){
     if($("#hp")&&$("#hp").value)return;if(!$("#ag").checked)return $("#ae2").textContent="請先勾選同意使用條款與隱私權政策。";
@@ -364,7 +409,7 @@ function list(){
     if(q&&!(e.title+e.description+(e.venue||"")+(e.district||"")+e.city).toLowerCase().includes(q))return false;
     if(S.when.size&&![...S.when].some(w=>w==="today"?ds.some(x=>x[1]===0):w==="weekend"?ds.some(x=>[0,6].includes(x[0].getDay())&&x[1]>=0&&x[1]<=6):w==="7d"?ds.some(x=>x[1]>=0&&x[1]<=7):ds.some(x=>x[0].getMonth()===now.getMonth()&&x[0].getFullYear()===now.getFullYear())))return false;
     return true;
-  }).sort((a,b)=>new Date(a.start_at)-new Date(b.start_at));
+  }).sort((a,b)=>nextEventDate(a)-nextEventDate(b));
 }
 function cal(base){
   const y=S.month.getFullYear(),m=S.month.getMonth(),first=new Date(y,m,1).getDay(),n=new Date(y,m+1,0).getDate(),cnt={},today=ymd(new Date());
@@ -376,7 +421,7 @@ function cal(base){
 }
 function ecard(e){
   const st=new Date(e.start_at);
-  return `<div class="ev" role="link" tabindex="0" aria-label="查看活動：${esc(e.title)}" data-go="#/events/e/${e.id}"><div class="dt"><b>${st.getMonth()+1}/${st.getDate()}</b><span>${multi(e)?"至 "+md(d0(endOf(e))):"週"+WK[st.getDay()]}</span></div><div class="eb"><b>${esc(e.title)}</b><div class="mu">${tRange(e)} · ${esc(e.city)}${esc(e.district||"")}${e.venue?" · "+esc(e.venue):""}</div><div><span class="t ag">${ageTxt(e)}</span><span class="t">${AUD[e.audience]||"親子"}</span><span class="t ${e.fee?"":"ok"}">${feeTxt(e)}</span>${orgTag(e)}</div><div class="mu" style="margin-top:4px">♥ ${cntE(S.elikes,e.id)} · ★ ${cntE(S.efavs,e.id)}</div></div></div>`;
+  return `<div class="ev" role="link" tabindex="0" aria-label="查看活動：${esc(e.title)}" data-go="#/events/e/${e.id}"><div class="dt"><b>${st.getMonth()+1}/${st.getDate()}</b><span>${multi(e)?"至 "+md(d0(endOf(e))):"週"+WK[st.getDay()]}</span></div><div class="eb"><b>${esc(e.title)}</b><div class="mu">${tRange(e)} · ${esc(e.city)}${esc(e.district||"")}${e.venue?" · "+esc(e.venue):""}</div><div><span class="t ag">${ageTxt(e)}</span><span class="t">${AUD[e.audience]||"親子"}</span><span class="t ${e.fee?"":"ok"}">${feeTxt(e)}</span>${orgTag(e)}</div><div class="mu" style="margin-top:4px">♥ ${cntE(S.elikes,e.id)} · ★ ${cntE(S.efavs,e.id)} · 瀏覽 ${Number(e.view_count||0)}</div></div></div>`;
 }
 function home(){
   const grp=(k,arr)=>arr.map(([v,t])=>`<button data-a="e.ft" data-k="${k}" data-v="${v}" class="${S[k].has(String(v))?"on":""}">${t}</button>`).join("");
@@ -391,7 +436,7 @@ function home(){
   <div class="filter-label">費用</div><div class="filter-row">${grp("fee",[["free","免費"],["500","500 元以內"],["1000","1000 元以內"],["paid","付費"]])}</div>
   <div class="filter-label">參與對象</div><div class="filter-row">${grp("aud",[["family","親子"],["kids","只有孩子"],["parents","只有家長"]])}</div>
   <div class="filter-label">主辦方</div><div class="filter-row">${grp("org",[["personal","個人"],["organization","商家／機構"]])}</div></details>
-  <div class="filter-actions"><span class="filter-count" id="fcount"></span><button data-a="e.clr">清除所有篩選</button></div></div>
+  <div class="filter-actions"><span class="filter-count" id="fcount"></span><button data-a="e.clr">清除所有篩選</button></div><div class="filter-chips" id="active-event-filters"></div></div>
   <div class="section-head"><div><h2 id="lt"></h2><p>選擇活動卡片可查看完整資訊與主辦方連結。</p></div></div>
   <div class="r"><button data-a="e.sort" data-v="soon">即將到來</button><button data-a="e.sort" data-v="new">最新活動</button></div><div id="el"></div>
   <details class="calendar-panel" ${S.calOpen?"open":""}><summary>用日曆查看活動日期（點選有活動的日期，上方會顯示當天的活動）</summary><div class="card-box" id="cal"></div></details>`;
@@ -405,12 +450,15 @@ function draw(){
   document.querySelectorAll("[data-a='e.sort']").forEach(b=>b.classList.toggle("on",b.dataset.v===S.sort));
   $("#cal").innerHTML=cal(base);
   $("#fcount").textContent=`找到 ${base.length} 筆活動`+(S.day?" · 已選日期":"");
+  const active=[],labels={today:"今天",weekend:"本週末","7d":"7 天內",month:"本月",am:"早上",pm:"下午",ev:"晚上",all:"整天",free:"免費",paid:"付費",family:"親子",kids:"只有孩子",parents:"只有家長",personal:"個人主辦",organization:"商家／機構"};for(const k of ["when","city","age","fee","org","aud","tod"])for(const v of S[k])active.push(k==="city"?v:k==="age"?v+" 歲":(labels[v]||v));if(S.favOnly)active.push("只看收藏");if(S.q.trim())active.push("搜尋："+S.q.trim());
+  const chipBox=document.querySelector("#active-event-filters");if(chipBox)chipBox.innerHTML=active.map(x=>`<span>${esc(x)}</span>`).join("");
   $("#lt").textContent=S.day?S.day.replace(/-/g,"/")+" 的活動（"+l.length+"）":(S.sort==="new"?"最新活動":"近期活動")+"（"+l.length+"）";
   $("#el").innerHTML=(S.day?'<button data-a="e.day" data-k="">顯示全部日期</button>':"")+(l.map(ecard).join("")||`<p class="mu">${S.ev.length?"沒有符合條件的活動，換個條件試試看。":"還沒有活動，歡迎主辦方分享！"}</p>`);
 }
-function detail(id){
+async function detail(id){
   const e=S.ev.find(x=>x.id===id);
   if(!e){$("#app").innerHTML='<p><a data-go="#/events">← 返回</a></p><p>找不到這個活動，可能已結束、還在審核中或已被刪除。</p>';return}
+  const views=await trackView("event",id,e);
   const mine=S.u&&e.author_id===S.u.id,adm=S.me?.is_admin,st=new Date(e.start_at),place=[e.city+(e.district||""),e.venue,e.address].filter(Boolean).join(" ");
   $("#app").innerHTML=`<p><a data-go="#/events">← 返回活動列表</a></p><div class="card-box"><h2 style="margin:0 0 8px">${esc(e.title)}</h2>
   ${e.status!=="approved"?`<p class="rule">${e.status==="pending"?"審核中，目前只有你和管理員看得到。":"已被退回："+esc(e.reject_reason)+"。修改後可重新送審。"}</p>`:""}
@@ -423,7 +471,7 @@ function detail(id){
   <p><b>主辦方</b>：${isOrg(e)?`<a data-go="#/events/org/${e.author_id}">${esc(nick(e))}</a> <span class="mu">（查看簡介與其他活動）</span>`:esc(nick(e))}</p>
   ${e.link?`<p><a class="b" style="text-decoration:none;display:inline-block" href="${esc(e.link)}" target="_blank" rel="noopener noreferrer nofollow ugc">前往報名／詳情 ↗</a> <span class="mu">（外部連結，請自行留意）</span></p>`:""}
   <div class="r"><button data-a="e.toggle" data-t="event_likes" data-id="${id}" class="${hasE(S.elikes,id)?"on":""}">${hasE(S.elikes,id)?"♥":"♡"} 讚 ${cntE(S.elikes,id)}</button><button data-a="e.toggle" data-t="event_favs" data-id="${id}" class="${hasE(S.efavs,id)?"on":""}">${hasE(S.efavs,id)?"★ 已收藏":"☆ 收藏"} ${cntE(S.efavs,id)}</button><button data-a="e.share">分享連結</button><button data-a="e.report" data-k="event_id" data-id="${id}">檢舉活動</button>${mine?"":`<button data-a="e.report" data-k="target_user_id" data-id="${e.author_id}">檢舉主辦方</button>`}${mine?`<button data-a="e.edit" data-id="${id}">編輯</button>`:""}${mine||adm?`<button class="d" data-a="e.del" data-id="${id}">刪除</button>`:""}</div>
-  <p class="mu">活動資訊由主辦方提供，本站不代收報名與費用。日期、地點與費用可能變更，請以主辦方公告為準，並請自行評估孩子的安全。</p></div>`;
+  <p class="mu">瀏覽 ${views} 次。活動資訊由主辦方提供，本站不代收報名與費用。日期、地點與費用可能變更，請以主辦方公告為準，並請自行評估孩子的安全。</p></div>`;
 }
 let FD=[],FS=[];
 const tps=(id,t)=>{const[h,m]=(t||"").split(":");return `<div class="tp"><select id="${id}h"><option value="">時</option>${Array.from({length:24},(_,i)=>{const x=String(i).padStart(2,"0");return `<option value="${x}" ${h===x?"selected":""}>${x}</option>`}).join("")}</select><span>:</span><input id="${id}m" list="mins" inputmode="numeric" maxlength="2" placeholder="分" value="${m||""}"></div>`};
@@ -470,8 +518,11 @@ function form(e){
   <label>活動說明<textarea id="fh" rows="6" maxlength="800">${esc(e?.description)}</textarea></label>
   <label>${org?"報名或詳情連結（必填）":"報名或詳情連結（選填）"}<input id="fl" type="url" maxlength="200" placeholder="https://" value="${esc(e?.link)}"></label>
   <label>活動照片（選填，1 張${e?"；不選就保留原圖":""}）<input id="fp" type="file" accept="image/*"></label>
-  <div class="r"><button class="p" id="fsub">${e?"儲存並重新送審":"送出審核"}</button><button data-a="shut">取消</button></div><div class="mu" id="fe"></div>`);
+  <div class="draft-note">草稿會自動保存在目前這台裝置；活動照片需在正式送出時重新選取。</div><div class="r"><button id="save-event-draft">儲存草稿</button><button class="p" id="fsub">${e?"儲存並重新送審":"送出審核"}</button><button data-a="shut">關閉</button></div><div class="mu" id="fe"></div>`);
   $("#fsub").onclick=()=>submit(e);fillDist(e&&e.district);kindUI();drawChips();drawSch();
+  const after=(old)=>{const savedDistrict=(old?.fields||[]).find(x=>x.id==="fz")?.value;fillDist(savedDistrict||e?.district);if(savedDistrict)$("#fz").value=savedDistrict;kindUI();drawChips();drawSch()};
+  bindDraft("event",()=>({FD,FS}),after);
+  $("#save-event-draft").onclick=()=>saveDraft("event",{FD,FS});
 }
 function tv(id){const h=$("#"+id+"h").value;if(!h)return"";let m=$("#"+id+"m").value.trim();if(m==="")m="00";if(!/^\d{1,2}$/.test(m)||+m>59)return null;return h+":"+m.padStart(2,"0")}
 async function submit(e){
@@ -510,7 +561,7 @@ async function submit(e){
     if(file){const p=S.u.id+"/"+crypto.randomUUID()+".webp";const{error}=await sb.storage.from("photos").upload(p,await shrink(file),{contentType:"image/webp"});if(error)throw error;if(e&&e.photo)await sb.storage.from("photos").remove([e.photo]);photo=p}
     const row={title:t,description:h,start_at:st.toISOString(),end_at:en?en.toISOString():null,city:$("#fc").value,district:v("fz")||null,venue:v("fv")||null,address:org?(v("fad")||null):null,age_min:a1,age_max:a2,fee:f,fee_note:v("fn")||null,link:lk||null,map_link:mp||null,audience:$("#fau").value,flex_time:fx,continuous:cont,dates,schedule:sched,photo,status:"pending",reject_reason:null};
     const{error}=e?await sb.from("events").update(row).eq("id",e.id):await sb.from("events").insert({...row,author_id:S.u.id});
-    if(error)throw error;await load();shut();alert("已送出，審核通過後就會公開。");go("#/account");
+    if(error)throw error;await load();submissionSuccess("event");
   }catch(x){er.textContent="送出失敗："+zh(x);$("#fsub").disabled=false}
 }
 async function org(id){
@@ -524,10 +575,10 @@ async function org(id){
 window.kindUI=kindUI;window.fillDist=fillDist;
 const reset=()=>{T=0};
 async function ensure(){if(Date.now()-T>60000)await load()}
-async function show(sub,id){await ensure();if(sub==="e")detail(id);else if(sub==="org")await org(id);else home()}
+async function show(sub,id){await ensure();if(sub==="e")await detail(id);else if(sub==="org")await org(id);else home()}
 const SKIP=new Set(["menu","shut","auth","reg","login","signup","forgot","setpw","out","sus","unsus","delrep"]);
 Object.keys(act).forEach(k=>{if(!SKIP.has(k))ACT["e."+k]=act[k]});
-return{S,ensure,reset,show,openNew:()=>act.new(),tRange,ageTxt,feeTxt,AUD,isOrg,orgTag,nick,REASONS,load};
+return{S,ensure,reset,show,openNew:()=>act.new(),tRange,ageTxt,feeTxt,AUD,isOrg,orgTag,nick,REASONS,load,ecard,nextEventDate};
 })();
 const DOCS={
 privacy:["隱私權政策",`<p>「點子共玩所 Ideas together」（以下簡稱「本站」）重視你的隱私。以下說明我們如何蒐集、處理與利用你的個人資料。聯絡信箱：${MAIL}</p>
@@ -556,12 +607,21 @@ copyright:["著作權與下架申請",`<h3>投稿者的聲明</h3><ul><li>你投
 };
 function doc(k){const[t,h]=DOCS[k];$("#app").innerHTML=`<p><a data-go="#/">← 返回</a></p><div class="doc"><h2>${t}</h2>${h}<p class="mu">最後更新：2026 年 10 月 25 日</p></div>`}
 
-function homePage(){
-  $("#app").innerHTML=`<div class="intro"><h2>今天想找什麼？</h2><p>找靈感、找活動，也把生活中的好點子分享出去。</p></div>
+async function homePage(){
+  await Promise.all([G.ensure(),E.ensure()]);
+  const recent=G.S.games.filter(g=>g.status==="approved").sort((a,b)=>new Date(b.created_at)-new Date(a.created_at)).slice(0,3);
+  const eventList=E.S.ev.filter(e=>e.status==="approved"&&new Date(e.end_at||e.start_at)>=new Date()).sort((a,b)=>E.nextEventDate(a)-E.nextEventDate(b)).slice(0,3);
+  const gameHtml=recent.length?`<div class="home-mini-grid">${recent.map(g=>G.card({g,miss:0})).join("")}</div>`:'<div class="home-feed-empty">目前還沒有遊戲分享，歡迎成為第一位分享者。</div>';
+  const eventHtml=eventList.length?`<div class="home-mini-grid">${eventList.map(e=>E.ecard(e)).join("")}</div>`:'<div class="home-feed-empty">目前沒有即將舉辦的活動。</div>';
+  const notice=(()=>{try{return sessionStorage.getItem("ideas_submission_notice")}catch(e){return null}})();
+  if(notice){try{sessionStorage.removeItem("ideas_submission_notice")}catch(e){}}
+  $("#app").innerHTML=`${notice?`<div class="notice-banner">✓ ${esc(notice)} 你可以在「我的投稿」查看審核狀態。</div>`:""}<div class="intro"><h2>今天想找什麼？</h2><p>找靈感、找活動，也把生活中的好點子分享出去。</p></div>
 <div class="choose">
 <a class="pick a" href="#/events"><div class="eyebrow">EVENTS</div><h2>找親子活動</h2><p>查看近期活動日曆，依地點、孩子年齡、費用與時間篩選。</p><span class="go">看活動日曆 →</span></a>
 <a class="pick b2" href="#/games"><div class="eyebrow">GAMES</div><h2>找遊戲</h2><p>在家就能玩的親子遊戲點子，依孩子年齡和現有材料來找。</p><span class="go">找遊戲點子 →</span></a>
 </div>
+<section class="home-feed"><div class="home-feed-head"><h3>最新遊戲分享</h3><a href="#/games">瀏覽全部遊戲 →</a></div>${gameHtml}</section>
+<section class="home-feed"><div class="home-feed-head"><h3>近期親子活動</h3><a href="#/events">查看活動日曆 →</a></div>${eventHtml}</section>
 <div class="share"><h3>一起分享，讓更多家庭找到好點子</h3><p>家長可以分享居家遊戲，店家與機構可以分享親子活動資訊。本站僅提供資訊分享，不代收報名與費用。</p><div class="share-actions"><a class="primary" href="#/share-event">分享活動</a><a href="#/share-game">分享遊戲</a></div></div>`;
 }
 const ACC={tab:"posts",open:{}},ADM={open:{}};
@@ -572,6 +632,8 @@ async function accountPage(){
   await Promise.all([G.ensure(),E.ensure()]);
   const uid=AUTH.u.id,gs=G.S,es=E.S,org=AUTH.me?.account_type==="organization",st={pending:"審核中",approved:"已發佈",rejected:"已退回"};
   const myG=gs.games.filter(g=>g.author_id===uid),myE=es.ev.filter(e=>e.author_id===uid);
+  const hasGameDraft=!org&&!!readDraft("game"),hasEventDraft=!!readDraft("event");
+  const notice=(()=>{try{return sessionStorage.getItem("ideas_submission_notice")}catch(e){return null}})();if(notice){try{sessionStorage.removeItem("ideas_submission_notice")}catch(e){}}
   const fG=gs.games.filter(g=>g.status==="approved"&&gs.favs.some(f=>f.game_id===g.id&&f.user_id===uid));
   const fE=es.ev.filter(e=>e.status==="approved"&&es.efavs.some(f=>f.event_id===e.id&&f.user_id===uid));
   const sc=x=>x.status!=="approved"?` · <b>${st[x.status]}</b>${x.reject_reason?"："+esc(x.reject_reason):""}`:" · 已發佈";
@@ -581,9 +643,10 @@ async function accountPage(){
   const none='<p class="mu">還沒有內容。</p>';
   const posts=`${org?"":secOf(ACC.open,"pg","遊戲",myG.length,myG.map(g=>gi(g,1)).join("")||none)}${secOf(ACC.open,"pe","活動",myE.length,myE.map(e=>ei(e,1)).join("")||none)}${org?'<p class="mu">商家／機構帳號只能發佈活動。</p>':""}`;
   const favs=`${secOf(ACC.open,"fg","遊戲",fG.length,fG.map(g=>gi(g,0)).join("")||none)}${secOf(ACC.open,"fe","活動",fE.length,fE.map(e=>ei(e,0)).join("")||none)}`;
-  $("#app").innerHTML=`${AUTH.me?.suspended?`<p class="rule">你的帳號已被停權，無法投稿、留言或互動。如有疑問請來信 ${MAIL}。</p>`:""}
+  $("#app").innerHTML=`${notice?`<div class="notice-banner">✓ ${esc(notice)} 目前狀態可在下方「我的投稿」查看。</div>`:""}${AUTH.me?.suspended?`<p class="rule">你的帳號已被停權，無法投稿、留言或互動。如有疑問請來信 ${MAIL}。</p>`:""}
   <h2 style="margin:6px 8px 12px">我的帳號</h2>
   <div class="card-box"><p style="margin:0"><b>${esc(AUTH.me?.nickname||"")}</b> <span class="t ${org?"org":""}">${org?"商家／機構":"個人"}</span></p><p class="mu" style="margin:4px 0 0">${esc(AUTH.u.email||"")}</p>${org?`<div style="margin-top:12px"><label class="mu">商家／機構簡介（10–200 字，會顯示在你的主辦方頁面）<textarea id="pb" rows="3" maxlength="200">${esc(AUTH.me?.bio||"")}</textarea></label><label class="mu">官方網站（選填）<input id="pw" type="url" maxlength="200" placeholder="https://" value="${esc(AUTH.me?.website||"")}"></label><div class="r"><button data-a="a.savebio">儲存簡介</button><span class="mu" id="pbm"></span></div></div>`:""}<div class="r"><button class="p" data-a="e.new">＋ 分享活動</button>${org?"":'<button class="p" data-a="g.new">＋ 分享遊戲</button>'}</div></div>
+  ${(hasGameDraft||hasEventDraft)?`<div class="card-box" style="margin-top:14px"><h3 style="margin:0 0 6px">尚未完成的草稿</h3><p class="mu" style="margin:0 0 8px">草稿只儲存在目前這台裝置的瀏覽器中。</p><div class="r">${hasGameDraft?`<button data-a="g.resumeDraft">繼續編輯遊戲草稿</button>`:""}${hasEventDraft?`<button data-a="e.resumeDraft">繼續編輯活動草稿</button>`:""}</div></div>`:""}
   <div class="r" style="margin-top:16px">${tb("posts","我的投稿")}${tb("favs","我的收藏")}</div>
   ${ACC.tab==="posts"?posts:favs}
   <div class="card-box" style="margin-top:28px"><h3 style="margin:0 0 6px">帳號設定</h3><p class="mu" style="margin:0 0 10px">刪除帳號會一併刪除你的所有投稿、照片、留言與收藏，無法復原。</p><button class="d" data-a="a.delacc">刪除我的帳號</button></div>`;
@@ -609,6 +672,8 @@ ACT["a.savebio"]=async()=>{const m=$("#pbm");m.textContent="儲存中…";
   if(error){m.textContent="儲存失敗："+zh(error);return}
   const{data}=await sb.from("profiles").select("*").eq("id",AUTH.u.id).maybeSingle();AUTH.me=data;E.reset();m.textContent="已儲存，簡介已更新。";};
 ACT["a.tab"]=el=>{ACC.tab=el.dataset.v;ROUTE(true)};
+ACT["g.resumeDraft"]=()=>G.openNew();
+ACT["e.resumeDraft"]=()=>E.openNew();
 ACT["a.delacc"]=async()=>{
   if(prompt("刪除帳號會一併刪除你的所有投稿、照片、留言與收藏，無法復原。\n確定請輸入「刪除」")!=="刪除")return;
   await Promise.all([G.load(),E.load()]);
@@ -625,7 +690,7 @@ ACT["x.delrep"]=el=>adminAct(()=>sb.from("reports").delete().eq("id",el.dataset.
 async function ROUTE(keep){
   const[p0,p1,p2]=(location.hash||"#/").replace(/^#\/?/,"").split("/");
   document.body.className=!p0?"v-games v-home":p0==="events"||p0==="share-event"?"v-events":p0==="games"||p0==="share-game"?"v-games":(p0==="account"||p0==="admin"||DOCS[p0])?"v-games v-events":"v-games v-home";
-  if(!p0)homePage();
+  if(!p0)await homePage();
   else if(p0==="games")await G.show(p1,p2);
   else if(p0==="events")await E.show(p1,p2);
   else if(p0==="account")await accountPage();
@@ -633,7 +698,7 @@ async function ROUTE(keep){
   else if(DOCS[p0])doc(p0);
   else if(p0==="share-game"){history.replaceState(null,"","#/games");await G.show();G.openNew()}
   else if(p0==="share-event"){history.replaceState(null,"","#/events");await E.show();E.openNew()}
-  else homePage();
+  else await homePage();
   if(!keep)window.scrollTo(0,0);
 }
 document.addEventListener("keydown",e=>{if(e.key==="Escape"){const mn=$("#menu");if(mn)mn.classList.remove("s")}});
