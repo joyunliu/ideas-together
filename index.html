@@ -500,7 +500,7 @@ const act={
   async sus(el){if(!confirm("確定停權這位作者？他公開的遊戲與留言會被隱藏，也無法再投稿或留言。"))return;
     const{error}=await sb.from("profiles").update({suspended:true}).eq("id",el.dataset.id);if(error)return alert(zh(error));await load();route()},
   async unsus(el){const{error}=await sb.from("profiles").update({suspended:false}).eq("id",el.dataset.id);if(error)return alert(zh(error));await load();route()},
-  async delacc(){if(prompt("刪除帳號會一併刪除你的所有投稿、照片、留言與收藏，無法復原。\n確定請輸入「刪除」")!=="刪除")return;
+  async delacc(){if(prompt("刪除帳號會一併刪除你的所有投稿、照片、留言、收藏與報名紀錄，無法復原。\n確定請輸入「刪除」")!=="刪除")return;
     const{data:evp}=await sb.from("events").select("photo").eq("author_id",S.u.id);const ph=S.games.filter(g=>g.author_id===S.u.id).flatMap(g=>g.photos).concat((evp||[]).map(x=>x.photo).filter(Boolean));if(ph.length)await sb.storage.from("photos").remove(ph);
     const{error}=await sb.rpc("delete_my_account");if(error)return alert("刪除失敗："+zh(error));
     try{await sb.auth.signOut()}catch(e){}alert("帳號已刪除。");location.hash="#/"}
@@ -751,6 +751,78 @@ async function load(){
   if(r.error)alert("讀取資料失敗："+zh(r.error));
   S.ev=r.data||[];S.elikes=l.data||[];S.efavs=f.data||[];T=Date.now();
 }
+const attendanceKey=slot=>slot.d+"T"+slot.s;
+const attendanceSlots=e=>e.flex_time||e.continuous||e.series_booking?[]:eventSlots(e);
+function attendanceLabel(e,key){
+  if(!key)return e.series_booking?"整期報名 · "+tRange(e):tRange(e);
+  const slot=attendanceSlots(e).find(slot=>attendanceKey(slot)===key);
+  return slot?slotText(slot):fdate(dateOf(key.slice(0,10)))+" "+key.slice(11)+"（原場次，請向主辦方確認）";
+}
+const attendanceRemove=(id,key,label="取消標記")=>`<button data-a="e.unattend" data-id="${id}" data-slot="${esc(key)}">${label}</button>`;
+async function loadAttendance(e,panel){
+  if(!panel||!S.u)return;
+  const uid=S.u.id;
+  const {data,error}=await sb.from("event_registrations").select("slot_key").eq("user_id",uid).eq("event_id",e.id).order("slot_key");
+  if(!panel.isConnected||S.u?.id!==uid)return;
+  if(error){
+    panel.innerHTML='<p class="mu">暫時無法讀取已報名紀錄。 <button data-a="e.reloadAttendance">重試</button></p>';
+    return;
+  }
+  const saved=new Set(data.map(row=>row.slot_key));
+  const slots=attendanceSlots(e);
+  const available=slots.filter(slot=>slot.until>=new Date()&&!saved.has(attendanceKey(slot)));
+  const canMark=e.status==="approved"&&!S.me?.suspended&&(slots.length?available.length>0:upcomingSlots(e).length>0&&!saved.has(""));
+  panel.innerHTML=`<fieldset style="border:0;padding:0;margin:0;min-width:0"><legend class="mu">我的報名紀錄（只有你看得到）</legend>
+    ${[...saved].map(key=>`<div class="r"><span>✓ 已標記 · ${esc(attendanceLabel(e,key))}</span>${attendanceRemove(e.id,key)}</div>`).join("")}
+    ${canMark?`<div class="r">${slots.length>1?`<label>選擇已報名的場次<select aria-label="選擇已報名的場次"><option value="">請選擇場次</option>${available.map(slot=>`<option value="${esc(attendanceKey(slot))}">${esc(slotText(slot))}</option>`).join("")}</select></label>`:""}<button data-a="e.attend" data-id="${e.id}" data-slot="${slots.length===1?esc(attendanceKey(available[0])):""}">標記已報名</button></div><p class="mu">在主辦方完成報名後，回來標記。</p>`:""}</fieldset>`;
+}
+async function saveAttendance(button,remove=false){
+  if((!remove||!S.u)&&!need())return;
+  const uid=S.u.id,id=button.dataset.id,panel=button.closest("[data-attendance]");
+  const e=panel&&S.ev.find(item=>item.id===id);
+  const picker=panel?.querySelector("select"),key=remove||!picker?button.dataset.slot:picker.value;
+  if(!remove&&(!e||(picker&&!key)))return showToast("請先選擇已報名的場次。");
+  const controls=button.closest("fieldset")||button;
+  if(controls.disabled)return;
+  controls.disabled=true;
+  try{
+    const row={user_id:uid,event_id:id,slot_key:key};
+    const table=sb.from("event_registrations");
+    const {error}=await (remove?table.delete().match(row):table.upsert(row,{onConflict:"user_id,event_id,slot_key",ignoreDuplicates:true}));
+    if(error)throw error;
+    if(S.u?.id!==uid)return;
+    if(panel?.isConnected){
+      await loadAttendance(e,panel);
+      panel.querySelector("button")?.focus();
+    }else if(!panel&&button.isConnected)await route();
+    showToast(remove?"已取消報名標記":"已加入「已報名活動」");
+  }finally{controls.disabled=false}
+}
+async function attendanceList(uid){
+  const {data,error}=await sb.from("event_registrations")
+    .select("event_id,slot_key,events(id,title,status,start_at,end_at,city,district,venue,address,dates,schedule,flex_time,continuous,series_booking,link,booking_status,shared_organizer)")
+    .eq("user_id",uid);
+  if(error)return '<p class="mu">暫時無法讀取已報名活動。 <button data-a="a.tab" data-v="attending">重試</button></p>';
+  if(!data.length)return '<p class="mu">還沒有已報名活動。完成報名後，可在活動詳情點「標記已報名」。</p>';
+  const now=Date.now();
+  const date=row=>{
+    if(row.slot_key){
+      const slot=row.events&&attendanceSlots(row.events).find(slot=>attendanceKey(slot)===row.slot_key);
+      const [day,time]=row.slot_key.split("T");
+      return {start:+eventTime(day,time),future:(slot?.until??eventTime(day,time))>=now};
+    }
+    const e=row.events;
+    const next=e&&upcomingSlots(e)[0];
+    return next?{start:+eventTime(next.d,next.s||"00:00"),future:true}:{start:Date.parse(e?.start_at)||0,future:false};
+  };
+  return '<fieldset style="border:0;padding:0;margin:0;min-width:0"><legend class="mu">這份清單只有你看得到，近期場次會排在前面。</legend>'+data.map(row=>({...row,...date(row)})).sort((a,b)=>Number(b.future)-Number(a.future)||(a.future?a.start-b.start:b.start-a.start)).map(row=>{
+    const e=row.events?.status==="approved"?row.events:null;
+    const link=e&&eventRegistration(e);
+    const place=e&&[e.city+(e.district||""),e.venue,e.address].filter(Boolean).join(" · ");
+    return `<div class="cm">${e?`<a href="${eventLink(e.id)}"><b>${esc(e.title)}</b></a><p class="mu">${esc(attendanceLabel(e,row.slot_key))} · ${esc(place)}</p>`:'<b>活動目前無法查看</b>'}
+      <div class="r">${link?`<a class="b" href="${esc(e.link)}" target="_blank" rel="noopener noreferrer nofollow ugc">${link.label} ↗</a>`:""}${attendanceRemove(row.event_id,row.slot_key)}</div></div>`;
+  }).join("")+"</fieldset>";
+}
 const cntE=(a,id)=>a.filter(x=>x.event_id===id).length,hasE=(a,id)=>S.u&&a.some(x=>x.event_id===id&&x.user_id===S.u.id);
 const act={
   menu(el){const mn=$("#menu");if(!mn)return;const o=mn.classList.toggle("s");el.setAttribute("aria-expanded",o)},
@@ -779,6 +851,13 @@ const act={
       if(post){renderQuick(post);dialog.querySelector(`[data-t="${t}"]`)?.focus()}
       if($("#el"))draw();
     }else route();
+  },
+  attend:el=>saveAttendance(el),
+  unattend:el=>saveAttendance(el,true),
+  reloadAttendance(el){
+    const panel=el.closest("[data-attendance]");
+    const e=S.ev.find(item=>item.id===panel?.dataset.attendance);
+    if(e)return loadAttendance(e,panel);
   },
   favonly(el){S.favOnly=!S.favOnly;el.classList.toggle("on",S.favOnly);el.setAttribute("aria-pressed",S.favOnly);draw()},
   new:()=>need()&&form(),
@@ -1004,7 +1083,7 @@ async function detail(id){
   const e=S.ev.find(x=>x.id===id);
   if(!e){$("#app").innerHTML='<p><a data-go="#/events">← 返回</a></p><p>找不到這個活動，可能已結束、還在審核中或已被刪除。</p>';return}
   $("#app").innerHTML=detailHTML(e);
-  const views=await trackView("event",id,e);
+  const [views]=await Promise.all([trackView("event",id,e),loadAttendance(e,$("#app [data-attendance]"))]);
   const target=$("#app [data-event-views]");
   if(target?.dataset.eventViews===id)target.textContent=views;
 }
@@ -1017,15 +1096,16 @@ function renderQuick(e){
   dialog.dataset.id=e.id;
   $("#event-quick-link").href=eventLink(e.id);
   dialog.querySelector(".event-quick-body").innerHTML=detailHTML(e,true,dialog.dataset.day);
+  return loadAttendance(e,dialog.querySelector("[data-attendance]"));
 }
 async function openQuick(id,day=""){
   const e=S.ev.find(x=>x.id===id&&x.status==="approved");
   if(!e)return;
   const dialog=$("#event-quick");
   dialog.dataset.day=day;
-  renderQuick(e);
+  const attendance=renderQuick(e);
   if(!dialog.open)dialog.showModal();
-  const views=await trackView("event",id,e);
+  const [views]=await Promise.all([trackView("event",id,e),attendance]);
   const target=dialog.querySelector("[data-event-views]");
   if(dialog.open&&target?.dataset.eventViews===id)target.textContent=views;
 }
@@ -1044,6 +1124,7 @@ function detailHTML(e,quick=false,selectedDay){
   ${e.shared_organizer?`<p><b>主辦方</b>：${esc(e.shared_organizer)}<br><b>分享者</b>：${esc(nick(e))}</p>`:`<p><b>主辦方</b>：${isOrg(e)?`<a data-go="#/events/org/${e.author_id}">${esc(nick(e))}</a> <span class="mu">（查看簡介與其他活動）</span>`:esc(nick(e))}</p>`}
   ${link?`<p><a class="b" style="text-decoration:none;display:inline-block" href="${esc(e.link)}" target="_blank" rel="noopener noreferrer nofollow ugc">${link.label} ↗</a>${link.hint?`<br><span class="mu">${esc(link.hint)}</span>`:""}</p>`:""}
   <div class="r"><button data-a="e.toggle" data-t="event_likes" data-id="${id}" class="${hasE(S.elikes,id)?"on":""}">${hasE(S.elikes,id)?"♥":"♡"} 讚 ${cntE(S.elikes,id)}</button><button data-a="e.toggle" data-t="event_favs" data-id="${id}" class="${hasE(S.efavs,id)?"on":""}">${hasE(S.efavs,id)?"★ 已收藏":"☆ 收藏"} ${cntE(S.efavs,id)}</button><button data-a="e.share" data-id="${id}">分享連結</button><button data-a="e.report" data-k="event_id" data-id="${id}">檢舉活動</button>${mine?"":`<button data-a="e.report" data-k="target_user_id" data-id="${e.author_id}">${e.shared_organizer?"檢舉分享者":"檢舉主辦方"}</button>`}${!quick&&mine?`<button data-a="e.edit" data-id="${id}">編輯</button>${canAppendSession(e)?`<button data-a="e.appendSession" data-id="${id}">在本活動新增場次</button>`:""}${!e.shared_organizer&&S.me?.account_type==="organization"?`<button data-a="e.repeat" data-id="${id}">複製為新場次</button>`:""}`:""}${!quick&&(mine||adm)?`<button class="d" data-a="e.del" data-id="${id}">刪除</button>`:""}</div>
+  ${e.status==="approved"?(S.u?`<div data-attendance="${id}"><p class="mu">讀取報名紀錄…</p></div>`:upcomingSlots(e).length?`<div class="r"><button data-a="e.attend">標記已報名</button></div>`:""):""}
   ${!quick&&mine&&isOrg(e)&&!e.shared_organizer&&e.status==="approved"?`<div class="r"><label>更新整則活動的報名狀態<select id="host-booking">${bookingOptions(e.booking_status,"請選擇狀態")}</select></label><button data-a="e.updateBooking" data-id="${id}">儲存報名狀態</button></div>`:""}
   <p class="mu">瀏覽 <span data-event-views="${id}">${Number(e.view_count||0)}</span> 次。本站不代收報名與費用。日期、地點與費用可能變更，請以主辦方公告為準，並請自行評估孩子的安全。</p></div>
   ${reviewActions("e",e,REASONS)}`;
@@ -1384,12 +1465,12 @@ async function ensure(){if(Date.now()-T>60000)await load()}
 async function show(sub,id){await ensure();if(sub==="e")await detail(id);else if(sub==="org")await org(id);else home()}
 const SKIP=new Set(["menu","shut","auth","reg","login","signup","forgot","setpw","out","sus","unsus","delrep"]);
 Object.keys(act).forEach(k=>{if(!SKIP.has(k))ACT["e."+k]=act[k]});
-return{S,ensure,reset,show,openQuick,closeQuick,openDraft:form,openNew:()=>act.new(),importCulture,tRange,ageTxt,feeTxt,AUD,isOrg,orgTag,nick,REASONS,load,ecard,nextEventDate,upcomingSlots};
+return{S,ensure,reset,show,openQuick,closeQuick,openDraft:form,openNew:()=>act.new(),importCulture,attendanceList,tRange,ageTxt,feeTxt,AUD,isOrg,orgTag,nick,REASONS,load,ecard,nextEventDate,upcomingSlots};
 })();
 const DOCS={
 privacy:["隱私權政策",`<p>「點子共玩所 Ideas together」（以下簡稱「本站」）重視你的隱私。以下說明我們如何蒐集、處理與利用你的個人資料。聯絡信箱：${MAIL}</p>
 <h3>一、蒐集的目的</h3><p>會員管理與登入驗證、遊戲投稿與審核、留言與互動、檢舉與停權處理、網站安全與防止濫用、與你聯繫。</p>
-<h3>二、蒐集的資料類別</h3><ul><li>Email、暱稱</li><li>密碼（加密後儲存，本站看不到原始密碼）</li><li>帳號類型（個人或商家／機構）</li><li>你投稿的文字、照片與連結（含活動資訊），你的留言</li><li>按讚、收藏、「我們玩過了」紀錄</li><li>檢舉紀錄</li><li>服務供應商產生的連線紀錄（例如 IP 位址、瀏覽器與裝置資訊）</li></ul>
+<h3>二、蒐集的資料類別</h3><ul><li>Email、暱稱</li><li>密碼（加密後儲存，本站看不到原始密碼）</li><li>帳號類型（個人或商家／機構）</li><li>你投稿的文字、照片與連結（含活動資訊），你的留言</li><li>按讚、收藏、「我們玩過了」與個人報名標記紀錄（報名標記僅你自己可見）</li><li>檢舉紀錄</li><li>服務供應商產生的連線紀錄（例如 IP 位址、瀏覽器與裝置資訊）</li></ul>
 <h3>三、公開與不公開的資料</h3><p>你的暱稱（商家／機構則為名稱）、帳號類型、已通過審核的投稿與活動資訊、照片、留言會公開給所有訪客看到。你的 Email 不會公開。</p>
 <h3>四、利用期間、地區、對象與方式</h3><ul><li>期間：自你註冊起，至你刪除帳號或本站停止服務為止（法律另有規定者除外）。</li><li>地區：本站使用海外雲端服務，資料可能儲存或處理於台灣以外的地區。</li><li>對象：本站管理者，以及為提供服務所必需的供應商：資料庫與登入服務（Supabase）、網頁代管（GitHub Pages），若啟用驗證碼則包含 Cloudflare。</li><li>方式：僅在上述目的範圍內使用，不會出售你的個人資料，也不會用於廣告。</li></ul>
 <h3>五、你的權利</h3><p>你可以查詢或請求閱覽、複製你的個人資料，請求補充或更正，請求停止蒐集、處理或利用，或請求刪除。登入後可在「我的」頁面直接刪除帳號與你的所有資料；也可以來信 ${MAIL} 提出。</p>
@@ -1444,9 +1525,11 @@ const ACC={tab:"posts",open:{}},ADM={open:{}};
 const secOf=(st,k,t,n,body)=>`<details class="sec" data-k="${k}" ${st[k]!==false?"open":""}><summary><h3>${t}（${n}）</h3></summary>${body}</details>`;
 const hookSec=st=>document.querySelectorAll("#app details.sec").forEach(d=>{d.ontoggle=()=>{st[d.dataset.k]=d.open}});
 async function accountPage(){
-  if(!AUTH.u){$("#app").innerHTML='<div class="doc"><h2>我的帳號</h2><p>請先登入，才能查看你的投稿與收藏。</p><button class="p" data-a="auth">登入／註冊</button></div>';return}
-  await Promise.all([G.ensure(),E.ensure()]);
-  const uid=AUTH.u.id,gs=G.S,es=E.S,org=AUTH.me?.account_type==="organization",st={pending:"審核中",approved:"已發佈",rejected:"已退回"};
+  if(!AUTH.u){$("#app").innerHTML='<div class="doc"><h2>我的帳號</h2><p>請先登入，才能查看你的投稿、收藏與報名紀錄。</p><button class="p" data-a="auth">登入／註冊</button></div>';return}
+  const uid=AUTH.u.id,tab=ACC.tab,hash=location.hash;
+  const [, , attendance]=await Promise.all([G.ensure(),E.ensure(),tab==="attending"?E.attendanceList(uid):null]);
+  if(AUTH.u?.id!==uid||ACC.tab!==tab||location.hash!==hash)return;
+  const gs=G.S,es=E.S,org=AUTH.me?.account_type==="organization",st={pending:"審核中",approved:"已發佈",rejected:"已退回"};
   const myG=gs.games.filter(g=>g.author_id===uid),myE=es.ev.filter(e=>e.author_id===uid);
 
   const notice=(()=>{try{return sessionStorage.getItem("ideas_submission_notice")}catch(e){return null}})();if(notice){try{sessionStorage.removeItem("ideas_submission_notice")}catch(e){}}
@@ -1463,9 +1546,9 @@ async function accountPage(){
   <h2 style="margin:6px 8px 12px">我的帳號</h2>
   <div class="card-box"><p style="margin:0"><b>${esc(AUTH.me?.nickname||"")}</b> <span class="t ${org?"org":""}">${org?"商家／機構":"個人"}</span></p><p class="mu" style="margin:4px 0 0">${esc(AUTH.u.email||"")}</p>${org?`<div style="margin-top:12px"><label class="mu">商家／機構簡介（10–200 字，會顯示在你的主辦方頁面）<textarea id="pb" rows="3" maxlength="200">${esc(AUTH.me?.bio||"")}</textarea></label><label class="mu">官方網站（選填）<input id="pw" type="url" maxlength="200" placeholder="https://" value="${esc(AUTH.me?.website||"")}"></label><div class="r"><button data-a="a.savebio">儲存簡介</button><span class="mu" id="pbm"></span></div></div>`:""}<div class="r"><button class="p" data-a="e.new">＋ 分享活動</button>${org?"":'<button class="p" data-a="g.new">＋ 分享遊戲</button>'}</div></div>
   <div id="draft-list"></div>
-  <div class="r" style="margin-top:16px">${tb("posts","我的投稿")}${tb("favs","我的收藏")}</div>
-  ${ACC.tab==="posts"?posts:favs}
-  <div class="card-box" style="margin-top:28px"><h3 style="margin:0 0 6px">帳號設定</h3><p class="mu" style="margin:0 0 10px">刪除帳號會一併刪除你的所有投稿、照片、留言與收藏，無法復原。</p><button class="d" data-a="a.delacc">刪除我的帳號</button></div>`;
+  <div class="r" style="margin-top:16px">${tb("posts","我的投稿")}${tb("favs","我的收藏")}${tb("attending","已報名活動")}</div>
+  ${tab==="posts"?posts:tab==="favs"?favs:attendance}
+  <div class="card-box" style="margin-top:28px"><h3 style="margin:0 0 6px">帳號設定</h3><p class="mu" style="margin:0 0 10px">刪除帳號會一併刪除你的所有投稿、照片、留言、收藏與報名紀錄，無法復原。</p><button class="d" data-a="a.delacc">刪除我的帳號</button></div>`;
   hookSec(ACC.open);
   refreshDraftList();
 }
@@ -1531,7 +1614,7 @@ ACT["draft.delete"]=el=>{
   refreshDraftList();
 };
 ACT["a.delacc"]=async()=>{
-  if(prompt("刪除帳號會一併刪除你的所有投稿、照片、留言與收藏，無法復原。\n確定請輸入「刪除」")!=="刪除")return;
+  if(prompt("刪除帳號會一併刪除你的所有投稿、照片、留言、收藏與報名紀錄，無法復原。\n確定請輸入「刪除」")!=="刪除")return;
   await Promise.all([G.load(),E.load()]);
   const uid=AUTH.u.id,ph=G.S.games.filter(g=>g.author_id===uid).flatMap(g=>g.photos).concat(E.S.ev.filter(e=>e.author_id===uid).map(e=>e.photo).filter(Boolean));
   if(ph.length)await sb.storage.from("photos").remove(ph);
