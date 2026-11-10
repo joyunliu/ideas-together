@@ -227,7 +227,7 @@ const SB_URL="https://impuxatitpghslleasma.supabase.co",SB_KEY="sb_publishable_b
 const sb=supabase.createClient(SB_URL,SB_KEY);
 const MAIL="ideastogether2026@gmail.com";
 function zh(e){const m=String(e&&e.message||e||"");
-  const C={events_title_check:"活動主題需在 20 字內",games_title_check:"遊戲名稱需在 20 字內",games_how_check:"玩法需在 500 字內",games_materials_check:"材料最多 10 項",games_age_check:"年齡選項不正確",comments_body_check:"留言需在 300 字內",events_description_check:"活動說明需在 800 字內",events_fee_check:"費用需在 0 到 100000 元之間",events_check:"建議年齡的範圍有誤",games_link_check:"連結格式不正確，需以 http:// 或 https:// 開頭",events_link_check:"連結格式不正確，需以 http:// 或 https:// 開頭",events_map_link_check:"地圖連結格式不正確，需以 http:// 或 https:// 開頭",profiles_nickname_check:"名稱需在 2 到 30 字之間",profiles_bio_check:"簡介需在 200 字內"};
+  const C={events_title_check:"活動主題需在 50 字內",games_title_check:"遊戲名稱需在 20 字內",games_how_check:"玩法需在 500 字內",games_materials_check:"材料最多 10 項",games_age_check:"年齡選項不正確",comments_body_check:"留言需在 300 字內",events_description_check:"活動說明需在 800 字內",events_fee_check:"費用需在 0 到 100000 元之間",events_check:"建議年齡的範圍有誤",games_link_check:"連結格式不正確，需以 http:// 或 https:// 開頭",events_link_check:"連結格式不正確，需以 http:// 或 https:// 開頭",events_map_link_check:"地圖連結格式不正確，需以 http:// 或 https:// 開頭",profiles_nickname_check:"名稱需在 2 到 30 字之間",profiles_bio_check:"簡介需在 200 字內"};
   for(const k in C)if(m.includes(k))return C[k]+"。";
   if(/[\u4e00-\u9fff]/.test(m))return m;
   const N={city:"縣市",title:"名稱",description:"活動說明",how:"玩法",start_at:"開始時間",nickname:"名稱",age:"年齡",age_min:"建議年齡",age_max:"建議年齡"};
@@ -868,6 +868,7 @@ const AGE_PRESETS=[["各年齡",0,12],...EVENT_AGES];
 const ageKey=(min,max)=>min+"-"+max;
 const agePreset=(min,max)=>AGE_PRESETS.some(([,a,b])=>a===min&&b===max)?ageKey(min,max):"custom";
 const BOOKING={walkin:"免報名",open:"有正取名額",waitlist:"僅候補",upcoming:"尚未開放",full:"已額滿",cancelled:"已取消"};
+const EVENT_TITLE_LIMIT=50;
 const bookingOptions=(value="",placeholder="尚未確認")=>'<option value="">'+placeholder+'</option>'+Object.entries(BOOKING).map(([k,label])=>`<option value="${k}" ${value===k?"selected":""}>${label}</option>`).join("");
 const bookingState=(e,slot)=>["cancelled","full"].includes(e.booking_status)?e.booking_status:(slot&&Object.hasOwn(BOOKING,slot.booking)?slot.booking:e.booking_status);
 const bookingBadge=(e,slot)=>{
@@ -1369,7 +1370,30 @@ function detailHTML(e,quick=false,selectedDay,selectedSlot){
 let FD=[],FS=[];
 const tps=(id,t)=>{const[h,m]=(t||"").split(":");return `<div class="tp"><select id="${id}h"><option value="">時</option>${Array.from({length:24},(_,i)=>{const x=String(i).padStart(2,"0");return `<option value="${x}" ${h===x?"selected":""}>${x}</option>`}).join("")}</select><span>:</span><input id="${id}m" list="mins" inputmode="numeric" maxlength="2" placeholder="分" value="${esc(m||"")}"></div>`};
 function syncSch(){FS.forEach((x,i)=>{if(!$("#event-sa"+i+"h"))return;x.s=tv("event-sa"+i);x.e=tv("event-sb"+i);x.booking=$("#event-sbook"+i).value})}
-function drawSch(){const b=$("#schrows");if(!b)return;b.innerHTML=FS.map((x,i)=>{const d=new Date(x.d+"T00:00");return `<div class="cm"><div class="r" style="justify-content:space-between"><b>${md(d)}（週${WK[d.getDay()]}）</b><button data-a="e.rmsch" data-i="${i}" aria-label="移除這個場次" style="color:var(--er)">× 移除</button></div><div class="r"><label>開始時間${tps("event-sa"+i,x.s)}</label><label>結束時間（選填）${tps("event-sb"+i,x.e)}</label></div><label>這場的報名狀態<select id="event-sbook${i}">${bookingOptions(x.booking,"沿用活動狀態")}</select></label></div>`}).join("")||'<p class="mu">還沒有加入日期</p>'}
+const eachSlotHasBooking=schedule=>!!schedule?.length&&schedule.every(slot=>Object.hasOwn(BOOKING,slot.booking));
+function applyScheduleBooking(schedule,booking){
+  if(eachSlotHasBooking(schedule))return null;
+  // A whole-event closure overrides slot statuses in public listings. Store a
+  // shared closure on only the slots that use it when the schedule is mixed.
+  if(["cancelled","full"].includes(booking)&&schedule?.some(slot=>Object.hasOwn(BOOKING,slot.booking))){
+    schedule.forEach(slot=>{if(!Object.hasOwn(BOOKING,slot.booking))slot.booking=booking});
+    return null;
+  }
+  return booking;
+}
+function updateBookingFields(){
+  const multi=$("[name=event-fk]:checked")?.value==="sched";
+  const slots=Array.from($("#schrows").querySelectorAll("[data-slot-booking]"),select=>({booking:select.value}));
+  const complete=multi&&eachSlotHasBooking(slots);
+  $("#event-booking-field").hidden=complete;
+  $("#event-booking-complete").hidden=!complete;
+  $("#event-booking-label").textContent=multi?"未個別設定場次的共用報名狀態":"報名狀態";
+  $("#event-booking-hint").hidden=!multi;
+  return complete;
+}
+function drawSch(){const b=$("#schrows");if(!b)return;b.innerHTML=FS.map((x,i)=>{const d=new Date(x.d+"T00:00");return `<div class="cm"><div class="r" style="justify-content:space-between"><b>${md(d)}（週${WK[d.getDay()]}）</b><button data-a="e.rmsch" data-i="${i}" aria-label="移除這個場次" style="color:var(--er)">× 移除</button></div><div class="r"><label>開始時間${tps("event-sa"+i,x.s)}</label><label>結束時間（選填）${tps("event-sb"+i,x.e)}</label></div><label>這場的報名狀態<select id="event-sbook${i}" data-slot-booking>${bookingOptions(x.booking,"使用第 2 步的共用狀態")}</select></label></div>`}).join("")||'<p class="mu">還沒有加入日期</p>';
+  updateBookingFields();
+}
 function drawChips(){const b=$("#dchips");if(b)b.innerHTML=FD.map(d=>{const x=new Date(d+"T00:00");return `<span class="t" style="font-size:13px;padding:5px 6px 5px 11px">${md(x)}（週${WK[x.getDay()]}）<button data-a="e.rmdate" data-d="${d}" aria-label="移除這個日期" style="border:0;background:none;padding:0 6px;cursor:pointer;color:var(--er)">×</button></span>`}).join("")||'<span class="mu">還沒有加入日期</span>'}
 function kindUI(){const k=(document.querySelector("[name=event-fk]:checked")||{}).value||"";
   $("#k_single").style.display=k==="single"?"":"none";$("#k_dates").style.display=k==="dates"?"":"none";$("#k_range").style.display=k==="range"?"":"none";$("#k_sched").style.display=k==="sched"?"":"none";
@@ -1380,6 +1404,7 @@ function kindUI(){const k=(document.querySelector("[name=event-fk]:checked")||{}
   const isFlexible=k!=="sched"&&$("#event-fx").checked;
   $("#event-recurring-field").hidden=!k||cont||isFlexible;
   $("#event-series-field").hidden=!["dates","range","sched"].includes(k)||cont||isFlexible;
+  updateBookingFields();
   $("#lbs").textContent=k==="single"?"開始時間（24 小時制）":cont?"第一天的開始時間（24 小時制）":"每天開始時間（24 小時制）";
   $("#lbe").textContent=k==="single"?"結束時間（選填）":cont?"最後一天的結束時間":"每天結束時間（選填）";
   $("#khint").textContent={"":"請先選擇活動類型，再填寫日期與時間。",single:"單日活動：只在一天舉辦。",dates:"多日活動：選出舉辦的每一天（日期不一定相連），每天使用相同的時段，例如 11/7 和 11/21 都是 09:00–12:00。",sched:"為每一場活動設定日期和時間。同一天若有早上與下午兩場，可以加入同一個日期兩次。",range:"連續多日：從開始日到結束日每天都舉辦，每天使用相同的時段。如果是住宿營隊這類不分每天的活動，請勾選「跨日連續進行」。"}[k]}
@@ -1388,6 +1413,7 @@ function form(e,draft,template,append=false){
   if(template)e=template;
   const org=S.me?.account_type==="organization",st=editing?taipeiDate(editing.start_at):null,en=editing?.end_at?taipeiDate(editing.end_at):null;
   const kind=append?"sched":template?"single":!editing?"":e.schedule?.length?"sched":(e.dates&&e.dates.length>1)?"dates":(en&&ymd(en)!==ymd(st)?"range":"single");FD=editing&&e.dates&&!e.schedule?[...e.dates]:[];FS=append?eventSlots(e).map(({d,s,e,booking})=>({d,s,e,booking})):editing&&e.schedule?e.schedule.map(x=>({...x})):[];
+  if(editing&&["cancelled","full"].includes(editing.booking_status))FS.forEach(slot=>{slot.booking=editing.booking_status});
   const tp=(id,d)=>`<div class="tp"><select id="${id}h"><option value="">時</option>${Array.from({length:24},(_,i)=>{const h=String(i).padStart(2,"0");return `<option value="${h}" ${d&&d.getHours()===i?"selected":""}>${h}</option>`}).join("")}</select><span>:</span><input id="${id}m" list="mins" inputmode="numeric" maxlength="2" placeholder="分" value="${d?String(d.getMinutes()).padStart(2,"0"):""}"></div>`;
   const ages=s=>Array.from({length:13},(_,i)=>`<option value="${i}" ${s===i?"selected":""}>${i} 歲</option>`).join("");
   modal(`<div data-draft-form="event"><h3 style="margin-top:0">${append?"在本活動新增場次":editing?"編輯活動":template?"複製為新場次":"分享一個活動"}</h3>
@@ -1398,7 +1424,7 @@ function form(e,draft,template,append=false){
   <div class="r"><label>活動來源<select id="event-source">${imported?"":'<option value="hosted">自己主辦</option>'}<option value="shared" ${e?.shared_organizer||imported?"selected":""}>轉貼他人活動</option></select></label>
   <label>活動形式<select id="event-format"><option value="in-person">實體活動</option><option value="online" ${e?.city===ONLINE?"selected":""}>線上活動</option></select></label></div>
   <div id="event-shared-fields" hidden><label>主辦方名稱（必填）<input id="event-organizer" maxlength="100" value="${esc(e?.shared_organizer)}"></label></div>
-  <label>活動主題（20 字內）<input id="event-ft" maxlength="20" value="${esc(e?.title)}"></label>
+  <label>活動主題（${EVENT_TITLE_LIMIT} 字內）<input id="event-ft" maxlength="${EVENT_TITLE_LIMIT}" value="${esc(e?.title)}"></label>
   <label>刊登分類<select id="event-listing-type"><option value="">依場次安排判斷</option>${Object.entries(LISTING_TYPES).map(([key,label])=>`<option value="${key}" ${e?.listing_type===key?"selected":""}>${label}</option>`).join("")}</select></label>
   <p class="mu">短期場次放活動日曆。展覽請選日期範圍，固定舉辦或自行預約請放相關資源。</p>
   <div class="filter-label" style="margin-top:4px">活動日期安排</div>
@@ -1430,7 +1456,9 @@ function form(e,draft,template,append=false){
   <div class="r"><label>起始月齡（選填）<input id="event-age-min-month" type="number" min="0" max="155" value="${esc(e?.age_min_month)}"></label><label>結束月齡（選填）<input id="event-age-max-month" type="number" min="0" max="155" value="${esc(e?.age_max_month)}"></label></div>
   <label>參與對象<select id="event-fau">${imported?'<option value="" selected>請確認參與對象</option>':""}<option value="family" ${!imported&&(!e||e.audience==="family")?"selected":""}>親子（家長與孩子一起）</option><option value="kids" ${e&&e.audience==="kids"?"selected":""}>只有孩子（家長不需陪同）</option><option value="parents" ${e&&e.audience==="parents"?"selected":""}>只有家長（例如講座）</option></select></label>
   <div class="r"><label>費用（元，免費填 0）<input id="event-ff" type="number" min="0" max="100000" value="${e?e.fee:imported?"":0}"></label><label>費用說明（選填，例如：含材料費）<input id="event-fn" maxlength="60" value="${esc(e?.fee_note)}"></label></div>
-  <label>報名狀態<select id="event-booking">${bookingOptions(editing?.booking_status,imported?"請確認報名狀態":"尚未確認")}</select></label>
+  <div id="event-booking-field"><label><span id="event-booking-label">報名狀態</span><select id="event-booking" aria-describedby="event-booking-hint">${bookingOptions(editing?.booking_status,imported?"請選擇報名狀態":"尚未確認")}</select></label>
+  <p id="event-booking-hint" class="mu" hidden>只套用到第 1 步選了「使用第 2 步的共用狀態」的場次。</p></div>
+  <p id="event-booking-complete" class="mu" hidden>每場都已填寫報名狀態，這裡不用再選。</p>
   ${editing?.booking_checked_at?'<label><input type="checkbox" id="event-recheck" style="width:auto"> 我已重新確認目前的報名狀態</label>':""}
   <label>活動說明<textarea id="event-fh" rows="6" maxlength="800">${esc(e?.description)}</textarea></label>
   <label>開放時間、休館日或預約方式（資源與展覽適用）<textarea id="event-visit-note" rows="2" maxlength="240">${esc(e?.visit_note)}</textarea></label>
@@ -1461,6 +1489,7 @@ function form(e,draft,template,append=false){
   };
   ageMode.onchange=showAges;
   $("#event-format").onchange=$("#event-source").onchange=showOptions;
+  $("#schrows").addEventListener("change",updateBookingFields);
   fillDist(e?.district);kindUI();drawChips();drawSch();showAges();showOptions();
   bindDraft("event",editing,draft,{
     extra:()=>({FD,FS,...(imported?{culture:imported}:{})}),
@@ -1482,6 +1511,7 @@ function form(e,draft,template,append=false){
       validate(step){
         if(step===0){
           if(!val("ft"))return "請填寫活動主題。";
+          if([...val("ft")].length>EVENT_TITLE_LIMIT)return "活動主題需在 50 字內。";
           if(shared()&&!val("organizer"))return "請填寫這場活動的主辦方名稱。";
           const timing=readTiming(!!editing);
           if(timing.error)return timing.error;
@@ -1501,7 +1531,7 @@ function form(e,draft,template,append=false){
           if(shared()&&val("fau")!=="parents"&&/^(全齡|各年齡|不限|闔家|全家)$/.test(ageDetail))return "請填寫主辦方公告的具體年齡、月齡或年級。";
           if(!editing&&shared()&&val("fau")!=="parents"&&!from&&!ageDetail&&min===0&&max===12)return "轉貼活動需填寫主辦方明確公告的年齡、月齡或年級。";
           if(!val("ff")||!Number.isInteger(fee)||fee<0||fee>100000)return "費用請填 0 到 100000 之間的整數。";
-          if(imported&&!val("booking")&&($("[name=event-fk]:checked")?.value!=="sched"||!FS.length||FS.some(slot=>!slot.booking)))return "請填寫整則活動的報名狀態，或逐場標示報名狀態。";
+          if(imported&&!updateBookingFields()&&!val("booking"))return "請選擇報名狀態。有多個場次時，也可以回到第 1 步逐場填寫。";
           if(!val("fh")||(imported&&!imported.web&&val("fh")===culturePlaceholder(imported.title)))return "請填寫活動說明，例如活動內容和參加方式。";
           if(shared()&&!link)return "請提供主辦方的官方公告或報名連結。";
           if(online()&&!link)return "請提供線上參加方式或報名連結。";
@@ -1520,7 +1550,8 @@ function form(e,draft,template,append=false){
       async submit(ctx){
         const [age_min,age_max]=bounds(),timing=readTiming(!!editing);
         if(!timing.row)throw new Error(timing.error);
-        const [from,to]=months(),booking=val("booking")||null;
+        const [from,to]=months();
+        const booking=applyScheduleBooking(timing.row.schedule,val("booking")||null);
         const slotStates=slots=>(slots||[]).filter(slot=>slot.booking).map(({d,s,booking})=>[d,s,booking]);
         const statesChanged=booking!==(editing?.booking_status||null)||JSON.stringify(slotStates(timing.row.schedule))!==JSON.stringify(slotStates(editing?.schedule));
         const hasStatus=booking||slotStates(timing.row.schedule).length;
@@ -1591,7 +1622,7 @@ function externalDraft(item,createdAt){
   const slots=Array.isArray(details.schedule)?details.schedule.filter(slot=>slot&&
     /^\d{4}-\d{2}-\d{2}$/.test(slot.d)&&/^\d{2}:\d{2}$/.test(slot.s)&&/^\d{2}:\d{2}$/.test(slot.e)&&
     eventTime(slot.d,slot.s)>new Date()):[];
-  add("ft",item.title.slice(0,20));
+  add("ft",[...item.title].slice(0,EVENT_TITLE_LIMIT).join(""));
   add("source","shared","select-one");
   add("format",item.online?"online":"in-person","select-one");
   add("organizer",item.organizer.slice(0,100));
@@ -1664,7 +1695,10 @@ async function importCulture(refresh=false){
     if(!allowed())return;
     const items=cultureCandidates(rows,new Date());
     const sourceKeys=new Set((existing.data||[]).map(row=>row.source_key));
-    const posted=item=>sourceKeys.has("culture:"+item.uid)||S.ev.some(e=>e.status!=="rejected"&&cultureURL(e.link)===item.link&&e.title===item.title.slice(0,20));
+    const posted=item=>{
+      const titles=[item.title.slice(0,20),[...item.title].slice(0,EVENT_TITLE_LIMIT).join("")];
+      return sourceKeys.has("culture:"+item.uid)||S.ev.some(e=>e.status!=="rejected"&&cultureURL(e.link)===item.link&&titles.includes(e.title));
+    };
     const drafts=new Map(readDrafts("event").map(draft=>[draft.id,draft]));
     choices.innerHTML='<button id="culture-reload">即時更新來源</button>'+items.map((item,i)=>`<article class="cm">
       <b>${esc(item.title)}</b>
