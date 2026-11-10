@@ -1,4 +1,5 @@
 alter table public.events
+  add column recurrence_note text check (recurrence_note is null or char_length(recurrence_note) between 1 and 40),
   add column age_detail text check (age_detail is null or char_length(age_detail) between 1 and 40),
   add column age_min_month smallint,
   add column age_max_month smallint,
