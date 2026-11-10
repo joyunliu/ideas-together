@@ -132,6 +132,17 @@ body:has(.event-quick[open]){overflow:hidden}
 .resource-grid a{justify-self:start;margin-top:4px}
 .resource-section{margin:20px 0 28px}
 .resource-section h3{margin:0 0 8px}
+.resource-category{min-height:168px;padding:18px;display:flex;flex-direction:column;gap:8px;border-radius:18px;border:1px solid var(--bd);background:var(--card);color:var(--tx);text-decoration:none;box-shadow:var(--shadow)}
+.resource-category:hover,.resource-category:focus-visible{border-color:var(--ac)}
+.resource-category h3,.resource-category p{margin:0}
+.resource-category .resource-category-open{margin-top:auto;color:var(--ac-dark);font-weight:700}
+.import-toolbar{position:sticky;top:0;z-index:1;background:var(--card);border-bottom:1px solid var(--bd);padding:6px 0}
+.import-suggestion-heading{display:flex;align-items:baseline;gap:8px}
+#event-import-queue input[type=checkbox]{width:auto;margin:0}
+.import-changes{display:grid;gap:8px;margin:8px 0}
+.import-changes dt{font-weight:700}
+.import-changes dd{margin:0;overflow-wrap:anywhere;white-space:pre-wrap}
+.import-suggestion-source{overflow-wrap:anywhere}
 .resource-facts{display:flex;flex-wrap:wrap;gap:4px 8px}
 .resource-facts .t{margin:0}
 </style></head><body>
@@ -388,7 +399,7 @@ async function shrink(file){
   if(!blob||blob.type!=="image/webp")throw new Error("無法處理這張照片，請換一張 JPG 或 PNG。");
   return blob;
 }
-async function savePost(ctx,table,row,files,previous,photoFields){
+async function savePost(ctx,table,row,files,previous,photoFields,importOrigin){
   const storage=sb.storage.from("photos"),uploaded=[];
   try{
     for(const file of files){
@@ -402,11 +413,20 @@ async function savePost(ctx,table,row,files,previous,photoFields){
     const data={...row,...photoFields(files.length?uploaded:previous),status:"pending",reject_reason:null};
     const result=ctx.postId
       ?await sb.from(table).update(data).eq("id",ctx.postId).select("id").single()
-      :await sb.from(table).insert({...data,author_id:ctx.uid});
+      :await (importOrigin?sb.from(table).insert({...data,author_id:ctx.uid}).select("id").single():sb.from(table).insert({...data,author_id:ctx.uid}));
     if(result.error){
       // A lost response can leave the outcome unknown. Keep potentially referenced files.
       if(result.status===0||result.status>=500)uploaded.length=0;
       throw result.error;
+    }
+    if(importOrigin){
+      try{
+        const {error}=await sb.from("event_import_suggestions").insert({event_id:result.data.id,...importOrigin});
+        if(error)throw error;
+      }catch(error){
+        console.warn("已送審，但未加入建議清單。",error);
+        alert("活動已送審。可從審核頁的「待審核活動」補加入建議清單。");
+      }
     }
   }catch(err){
     if(uploaded.length)await storage.remove(uploaded).catch(()=>{});
@@ -425,7 +445,7 @@ function pwBox(){modal(`<h3 style="margin-top:0">設定新密碼</h3><label>新�
 
 function nav(){
   const acct=AUTH.u?`<button data-go="#/account">${esc(AUTH.me?.nickname||"我的帳號")}</button>`:`<button class="p" data-a="auth">登入／註冊</button>`;
-  const mi=`<button data-go="#/events">找活動</button><button data-go="#/games">找遊戲</button><button data-go="#/resources">相關資源連結</button>`+(AUTH.u?`<button data-go="#/account">我的帳號</button>`:"")+(AUTH.me?.is_admin?`<button data-go="#/admin">審核</button>`:"")+(AUTH.u?`<hr><button data-a="out">登出</button>`:"");
+  const mi=`<button data-go="#/events">找活動</button><button data-go="#/games">找遊戲</button><button data-go="#/resources">展覽／固定活動</button>`+(AUTH.u?`<button data-go="#/account">我的帳號</button>`:"")+(AUTH.me?.is_admin?`<button data-go="#/admin">審核</button>`:"")+(AUTH.u?`<hr><button data-a="out">登出</button>`:"");
   $("#nav").innerHTML=`<button data-go="#/">首頁</button>${acct}<span class="mwrap"><button class="ic" data-a="menu" aria-label="選單" aria-expanded="false">${MENU_ICON}</button><div class="menu" id="menu">${mi}</div></span>`;
 }
 ACT.shut=()=>{
@@ -1053,7 +1073,7 @@ function ecard(e,slots=upcomingSlots(e),home=false){
 function home(){
   const grp=(k,arr)=>arr.map(([v,t])=>`<button data-a="e.ft" data-k="${k}" data-v="${v}" aria-pressed="${S[k].has(String(v))}" class="${S[k].has(String(v))?"on":""}">${t}</button>`).join("");
   const picker=(k,label,items)=>`<select data-event-picker data-k="${k}" aria-label="${label}"><option value="">${label}</option>${items.map(([v,t])=>`<option value="${esc(v)}">${esc(t)}</option>`).join("")}</select>`;
-  $("#app").innerHTML=`<div class="section-head hrow event-browse-head"><h2>親子活動日曆</h2><div class="r"><a class="b" href="#/resources/official">常用報名網站 ↗</a><button class="p" data-a="e.new">＋ 分享活動</button></div></div><p class="mu" style="margin:-4px 8px 12px">查看單場與短期親子活動，依地點、年齡、費用與時間篩選。報名與活動詳情請以主辦方公告為準。</p>
+  $("#app").innerHTML=`<div class="section-head hrow event-browse-head"><h2>親子活動日曆</h2><div class="r"><button class="p" data-a="e.new">＋ 分享活動</button></div></div><p class="mu" style="margin:-4px 8px 12px">查看單場與短期親子活動，依地點、年齡、費用與時間篩選。報名與活動詳情請以主辦方公告為準。</p>
   <div class="filter-panel"><div class="search-wrap"><input id="q" type="search" aria-label="搜尋活動" placeholder="搜尋活動名稱、說明或地點…" value="${esc(S.q)}"></div>
   <div class="event-quick-dates">${grp("when",[["today","今天"],["weekend","本週末"]])}<label class="event-date-picker"><span id="event-browse-date-label" aria-hidden="true">選日期</span><input id="event-browse-date" type="date" aria-label="選日期" min="${ymd(taipeiToday())}"></label></div>
   <div class="event-filter-quick">${picker("city","地區",[ONLINE,...CITIES].map(c=>[c,c]))}${picker("age","年齡",EVENT_AGES.map(([label],i)=>[i,label]))}<button id="event-more-toggle" data-a="e.more" aria-expanded="${S.advOpen}" aria-controls="event-more-filters">更多篩選</button></div>
@@ -1151,7 +1171,7 @@ function detailHTML(e,quick=false,selectedDay){
   const id=e.id,link=eventRegistration(e);
   const mine=S.u&&e.author_id===S.u.id,adm=S.me?.is_admin,place=[e.city+(e.district||""),e.venue,e.address].filter(Boolean).join(" ");
   const category=listingType(e);
-  const back=category==="event"?'<a href="#/events">← 返回活動列表</a>':'<a href="#/resources">← 返回相關資源連結</a>';
+  const back=category==="event"?'<a href="#/events">← 返回活動列表</a>':category==="exhibition"?'<a href="#/resources/exhibitions">← 返回展覽</a>':'<a href="#/resources/fixed">← 返回固定活動與自行預約</a>';
   const exhibition=e.related_exhibition_id&&S.ev.find(row=>row.id===e.related_exhibition_id&&row.status==="approved"&&listingType(row)==="exhibition");
   const programs=category==="exhibition"?S.ev.filter(row=>row.related_exhibition_id===id&&row.status==="approved"&&listingType(row)==="event"&&upcomingSlots(row).length):[];
   return `${quick?"":`<p>${canReview(e)?'<a href="#/admin">← 返回審核</a>':back}</p>`}<div class="card-box"><h2 ${quick?'id="event-quick-title"':""} style="margin:0 0 8px">${esc(e.title)}</h2>
@@ -1329,7 +1349,8 @@ function form(e,draft,template,append=false){
           title:val("ft"),description:val("fh"),city:online()?ONLINE:val("fc"),district:online()?null:val("fz")||null,
           venue:online()?null:val("fv")||null,address:!online()&&org?val("fad"):null,age_min,age_max,fee:+val("ff"),fee_note:val("fn")||null,
           shared_organizer:shared()?val("organizer"):null,link:val("fl")||null,map_link:online()?null:val("fmp")||null,audience:val("fau")};
-        await savePost(ctx,"events",row,file()?[file()]:[],editing?.photo?[editing.photo]:[],photos=>({photo:photos[0]||null}));
+        const origin=imported&&AUTH.me?.is_admin&&cultureURL(imported.link)?{source_name:"文化部開放資料",source_url:cultureURL(imported.link)}:null;
+        await savePost(ctx,"events",row,file()?[file()]:[],editing?.photo?[editing.photo]:[],photos=>({photo:photos[0]||null}),origin);
         T=0;
       }
     }
@@ -1553,18 +1574,12 @@ const RESOURCE_LINKS=[
   ["新北市","新北市立圖書館活動報名","找各分館的親子共讀、故事時間和閱讀活動。","https://atpass.ntpclib.gov.tw/"],
   ["台北市","臺北育兒網","查各親子館資訊、預約入館與報名親子活動。","https://welfare.gov.taipei/Kids/parentChild/Index"]
 ];
-async function resourcesPage(officialOnly){
-  const section=(id,title,intro,items)=>`<section class="resource-section" aria-labelledby="${id}"><h3 id="${id}">${title}</h3><p class="mu">${intro}</p>${items?`<div class="resource-grid">${items}</div>`:'<p class="mu">目前沒有已刊登的項目。</p>'}</section>`;
-  const official=RESOURCE_LINKS.map(([region,title,description,url])=>`<article class="card-box"><div><span class="t ag">${esc(region)}</span></div><h4 style="margin:0">${esc(title)}</h4><p class="mu">${esc(description)}</p><a class="b" href="${esc(url)}" target="_blank" rel="noopener noreferrer">前往官方平台 ↗</a></article>`).join("");
-  const back='<p><a href="#/events">← 返回親子活動</a></p>';
-  if(officialOnly){
-    $("#app").innerHTML=`${back}<div class="section-head"><h2>常用報名網站</h2></div>${section("official-resources-title","官方網站","到各地官方平台查活動、入館或報名。",official)}<p><a href="#/resources">查看展覽與固定活動</a></p>`;
-    return;
-  }
+async function resourcesPage(sub){
+  const hash=location.hash;
   await E.ensure();
-  const [page,sectionName]=location.hash.replace(/^#\/?/,"").split("/");
-  if(page!=="resources"||sectionName==="official")return;
+  if(location.hash!==hash)return;
   const records=E.S.ev.filter(e=>e.status==="approved");
+  const section=(id,title,intro,items)=>`<section class="resource-section" aria-labelledby="${id}"><h2 id="${id}">${title}</h2><p class="mu">${intro}</p>${items?`<div class="resource-grid">${items}</div>`:'<p class="mu">目前沒有已刊登的項目。</p>'}</section>`;
   const card=e=>{
     const exhibition=E.listingType(e)==="exhibition";
     const slots=exhibition?[]:E.upcomingSlots(e);
@@ -1575,10 +1590,20 @@ async function resourcesPage(officialOnly){
   };
   const exhibitions=records.filter(e=>E.listingType(e)==="exhibition"&&Date.parse(e.end_at||e.start_at)>=Date.now());
   const fixed=records.filter(e=>E.listingType(e)==="resource"&&(!e.flex_time||E.upcomingSlots(e).length));
-  $("#app").innerHTML=`${back}<div class="section-head"><div><h2>相關資源連結</h2><p>找展覽、固定活動、自行預約和官方網站。</p></div></div>
-    ${section("exhibitions-title","展覽","依公告展期和開放時間參觀。休館及入場方式以各場館公告為準。",exhibitions.map(card).join(""))}
-    ${section("fixed-resources-title","固定活動與自行預約","長期開放或持續舉辦的親子資源。各場名額請以官網為準。",fixed.map(card).join(""))}
-    ${section("official-resources-title","官方網站","到各地官方平台查活動、入館或報名。",official)}`;
+  const official=RESOURCE_LINKS.map(([region,title,description,url])=>`<article class="card-box"><div><span class="t ag">${esc(region)}</span></div><h4 style="margin:0">${esc(title)}</h4><p class="mu">${esc(description)}</p><a class="b" href="${esc(url)}" target="_blank" rel="noopener noreferrer">前往官方平台 ↗</a></article>`).join("");
+  const categories=[
+    ["exhibitions","展覽","依展期與開放時間安排參觀。",exhibitions.length,()=>exhibitions.map(card).join("")],
+    ["fixed","固定活動與自行預約","查常態活動、親子空間和預約方式。",fixed.length,()=>fixed.map(card).join("")],
+    ["websites","官方網站","前往各地官方平台查活動、入館和報名。",RESOURCE_LINKS.length,()=>official]
+  ];
+  const selected=categories.find(([key])=>key===(sub==="official"?"websites":sub));
+  if(selected){
+    const [key,title,intro,,render]=selected;
+    $("#app").innerHTML=`<p><a href="#/resources">← 返回分類</a></p>${section("resources-"+key,title,intro,render())}`;
+    return;
+  }
+  $("#app").innerHTML=`<p><a href="#/events">← 返回親子活動</a></p><div class="section-head"><div><h2>展覽、固定活動與官方網站</h2><p>選擇一個分類，查看裡面的活動或網站。</p></div></div>
+    <div class="resource-grid">${categories.map(([key,title,intro,count])=>`<a class="resource-category" href="#/resources/${key}"><h3>${title}</h3><p class="mu">${intro}</p><span class="resource-category-open">查看 ${count} 項 →</span></a>`).join("")}</div>`;
 }
 async function homePage(){
   await Promise.all([G.ensure(),E.ensure()]);
@@ -1628,22 +1653,166 @@ async function accountPage(){
   hookSec(ACC.open);
   refreshDraftList();
 }
+const IMPORT_FIELDS={"title":"名稱","description":"活動說明","start_at":"開始時間","end_at":"結束時間","city":"縣市","district":"行政區","venue":"場館","address":"地址","age_min":"起始年齡","age_max":"結束年齡","fee":"費用","fee_note":"費用說明","link":"官方連結","map_link":"地圖連結","audience":"參加對象","flex_time":"自行預約","dates":"活動日期","continuous":"跨日連續","schedule":"場次與報名狀態","shared_organizer":"主辦方","series_booking":"整期報名","recurrence_note":"固定舉辦說明","age_detail":"適齡說明","age_min_month":"起始月齡","age_max_month":"結束月齡","booking_status":"報名狀態","booking_checked_at":"查核時間","listing_type":"刊登分類","visit_note":"參觀與預約方式","related_exhibition_id":"相關展覽"};
+const IMPORT_BOOKING={walkin:"免報名",open:"有正取名額",waitlist:"僅候補",upcoming:"尚未開放",full:"已額滿",cancelled:"已取消"};
+const IMPORT_CATEGORIES={event:"單場與短期活動",exhibition:"展覽",resource:"固定活動與自行預約"};
+const IMPORT_PERIODS={today:"今天",week:"本週",all:"全部待發布"};
+const importDateTime=new Intl.DateTimeFormat("zh-TW",{timeZone:"Asia/Taipei",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hourCycle:"h23"});
+function importURL(value){
+  try{
+    const url=new URL(value);
+    return ["http:","https:"].includes(url.protocol)&&!url.username&&!url.password?url.href:"";
+  }catch{return ""}
+}
+function importSource(url){
+  const host=new URL(url).hostname;
+  if(host==="lovebaby.sw.ntpc.gov.tw")return "新北育兒資訊網";
+  if(host==="atpass.ntpclib.gov.tw")return "新北市立圖書館";
+  if(host.endsWith(".arte.gov.tw"))return "國立臺灣藝術教育館";
+  if(host==="www.kmseh.gov.tw")return "高雄市立社會教育館";
+  if(host==="www.library.taichung.gov.tw")return "臺中市立圖書館";
+  return host.slice(0,100);
+}
+function importDay(value){
+  return new Date(Date.parse(value)+8*3600000).toISOString().slice(0,10);
+}
+function importPeriod(rows,period,now=new Date()){
+  if(period==="all")return rows;
+  const today=importDay(now.toISOString());
+  const day=new Date(today+"T00:00:00Z"),weekday=(day.getUTCDay()+6)%7;
+  const monday=new Date(+day-weekday*86400000).toISOString().slice(0,10);
+  const sunday=new Date(+day+(6-weekday)*86400000).toISOString().slice(0,10);
+  return rows.filter(row=>{
+    const date=importDay(row.suggested_at);
+    return period==="today"?date===today:date>=monday&&date<=sunday;
+  });
+}
+function importValue(key,value){
+  if(value===null||value===undefined||value==="")return "未填寫";
+  if(key==="schedule"&&Array.isArray(value))return value.map(slot=>[slot.d,slot.s+(slot.e?"–"+slot.e:""),IMPORT_BOOKING[slot.booking]||""].filter(Boolean).join(" ")).join("\n")||"未填寫";
+  if(key==="booking_status")return IMPORT_BOOKING[value]||value;
+  if(key==="listing_type")return IMPORT_CATEGORIES[value]||value;
+  if(key==="audience")return E.AUD[value]||value;
+  if(key==="related_exhibition_id")return E.S.ev.find(e=>e.id===value)?.title||value;
+  if(key.endsWith("_at")&&!Number.isNaN(Date.parse(value)))return importDateTime.format(new Date(value));
+  if(Array.isArray(value))return value.join("、");
+  if(typeof value==="boolean")return value?"是":"否";
+  if(typeof value==="object")return JSON.stringify(value);
+  return String(value);
+}
+async function loadImportQueue(){
+  const {data,error}=await sb.from("event_import_suggestions")
+    .select("id,event_id,source_name,source_url,changes,base_record,suggested_at,events!inner(status)")
+    .is("published_at",null).order("suggested_at",{ascending:false}).limit(500);
+  if(error)return {rows:[],error};
+  return {rows:data.filter(row=>row.events.status===row.base_record.status),error:null};
+}
+function showImportQueue(queue){
+  const panel=$("#event-import-queue");
+  if(!panel)return;
+  if(queue.error){
+    panel.innerHTML='<section class="card-box"><h3>建議匯入與更新</h3><p class="mu">目前讀不到建議清單。</p><button data-a="x.reloadQueue">重試</button></section>';
+    return;
+  }
+  const rows=importPeriod(queue.rows,ADM.importPeriod||"week");
+  const cards=rows.map(row=>{
+    const fields=Object.entries(row.changes),update=fields.length>0;
+    const old=row.base_record,proposed={...old,...row.changes};
+    const url=importURL(row.source_url);
+    const changes=update?`<dl class="import-changes">${fields.map(([key,value])=>`<div><dt>${esc(IMPORT_FIELDS[key]||key)}</dt><dd>現行：${esc(importValue(key,old[key]))}</dd><dd>建議：${esc(importValue(key,value))}</dd></div>`).join("")}</dl>`:
+      `<p>${esc(proposed.description).replace(/\n/g,"<br>")}</p>${proposed.schedule?.length?`<dl class="import-changes"><dt>全部場次</dt><dd>${esc(importValue("schedule",proposed.schedule))}</dd></dl>`:""}`;
+    const category=IMPORT_CATEGORIES[E.listingType(proposed)];
+    return `<article class="cm"><label class="import-suggestion-heading"><input type="checkbox" data-import-id="${row.id}"><b>${esc(proposed.title)}</b><span class="t ${update?"ag":"ok"}">${update?"更新建議":"新增活動"}</span></label>
+      <p class="mu">${esc(category)} · ${esc(proposed.city)}${esc(proposed.district||"")} · ${esc(E.ageTxt(proposed))} · ${esc(E.feeTxt(proposed))}</p>
+      <p>${esc(E.listingType(proposed)==="exhibition"?E.exhibitionDates(proposed):E.tRange(proposed))}</p>
+      <div class="r import-suggestion-source"><span class="mu">${esc(row.source_name)} · ${esc(importDateTime.format(new Date(row.suggested_at)))}</span>
+        ${url?`<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">查看來源 ↗</a>`:""}<a href="#/events/e/${row.event_id}">${update?"看目前活動":"看完整待審活動"}</a></div>
+      <details><summary>${update?"比較目前與建議內容":"預覽活動內容"}</summary>${changes}</details></article>`;
+  }).join("");
+  panel.innerHTML=`<section class="card-box" aria-labelledby="event-import-title"><h3 id="event-import-title" style="margin-top:0">建議匯入與更新</h3>
+    <p class="mu">先核對來源和內容，再勾選要一次發布的項目。更新建議會套用到原活動。</p>
+    <div class="r">${Object.entries(IMPORT_PERIODS).map(([key,label])=>`<button data-import-period="${key}" aria-pressed="${(ADM.importPeriod||"week")===key}" class="${(ADM.importPeriod||"week")===key?"on":""}">${label}（${importPeriod(queue.rows,key).length}）</button>`).join("")}</div>
+    ${rows.length?`<fieldset style="padding:0;margin:0;border:0;min-width:0" aria-label="選擇要發布的活動">
+      <div class="r import-toolbar"><label class="import-select-all"><input id="import-all" type="checkbox"> 全選這一頁</label><button class="p" id="import-publish" disabled>審核並發布所選</button><span class="mu" id="import-count" role="status"></span></div>${cards}
+    </fieldset>`:'<p class="mu">這個期間沒有待發布的建議。</p>'}
+    <p class="mu" id="import-message" role="status"></p></section>`;
+  panel.querySelectorAll("[data-import-period]").forEach(button=>button.onclick=()=>{
+    ADM.importPeriod=button.dataset.importPeriod;
+    showImportQueue(queue);
+    panel.querySelector(`[data-import-period="${ADM.importPeriod}"]`)?.focus();
+  });
+  if(!rows.length)return;
+  const all=panel.querySelector("#import-all"),publish=panel.querySelector("#import-publish");
+  const boxes=[...panel.querySelectorAll("[data-import-id]")];
+  const sync=()=>{
+    const count=boxes.filter(box=>box.checked).length;
+    publish.disabled=count===0;
+    all.checked=count===boxes.length;
+    all.indeterminate=count>0&&count<boxes.length;
+    panel.querySelector("#import-count").textContent=`已選 ${count} 筆`;
+  };
+  boxes.forEach(box=>box.onchange=sync);
+  all.onchange=()=>{boxes.forEach(box=>{box.checked=all.checked});sync()};
+  publish.onclick=async()=>{
+    if(!AUTH.me?.is_admin||AUTH.me.suspended)return;
+    const ids=boxes.filter(box=>box.checked).map(box=>box.dataset.importId);
+    if(!ids.length)return;
+    const fieldset=publish.closest("fieldset"),message=panel.querySelector("#import-message");
+    fieldset.disabled=true;
+    panel.querySelectorAll("[data-import-period]").forEach(button=>button.disabled=true);
+    message.textContent="正在發布所選建議…";
+    try{
+      const {data,error}=await sb.rpc("publish_event_import_suggestions",{p_ids:ids});
+      if(error)throw error;
+      E.reset();
+      if(panel.isConnected)await ROUTE(true);
+      showToast(`已審核並發布 ${data} 筆`);
+    }catch(error){
+      message.textContent=zh(error);
+    }finally{
+      fieldset.disabled=false;
+      panel.querySelectorAll("[data-import-period]").forEach(button=>button.disabled=false);
+    }
+  };
+  sync();
+}
+ACT["x.reloadQueue"]=()=>ROUTE(true);
+ACT["x.queueEvent"]=async button=>{
+  if(!AUTH.me?.is_admin||AUTH.me.suspended)return;
+  const event=E.S.ev.find(row=>row.id===button.dataset.id&&row.status==="pending"&&row.shared_organizer);
+  const url=event&&importURL(event.link);
+  if(!url)return;
+  button.disabled=true;
+  try{
+    const {error}=await sb.from("event_import_suggestions").insert({event_id:event.id,source_name:importSource(url),source_url:url});
+    if(error)throw error;
+    if(button.isConnected)await ROUTE(true);
+    showToast("已加入建議清單");
+  }finally{button.disabled=false}
+};
 async function adminPage(){
   if(!AUTH.me?.is_admin){$("#app").innerHTML="<p>沒有權限。</p>";return}
-  await Promise.all([G.load(),E.load()]);
+  const uid=AUTH.u?.id,hash=location.hash;
+  const [,,queue]=await Promise.all([G.load(),E.load(),loadImportQueue()]);
+  if(AUTH.u?.id!==uid||location.hash!==hash)return;
   const gp=G.S.games.filter(g=>g.status==="pending"),ep=E.S.ev.filter(e=>e.status==="pending");
   const{data:rp}=await sb.from("reports").select("*,games!game_id(title),comments!comment_id(body,game_id),events!event_id(title),target:profiles!target_user_id(id,nickname,suspended)").order("created_at");
   const{data:sp}=await sb.from("profiles").select("id,nickname").eq("suspended",true);
   const{data:rb}=await sb.from("profiles").select("id,nickname,bio,website,bio_updated_at").not("bio_updated_at","is",null).gte("bio_updated_at",new Date(Date.now()-14*864e5).toISOString()).order("bio_updated_at",{ascending:false});
+  if(AUTH.u?.id!==uid||location.hash!==hash)return;
   const {AGES,nick:gn}=G,{nick:en,tRange,orgTag}=E;
+  const queuedIds=new Set(queue.rows.map(row=>row.event_id));
+  const otherEvents=ep.filter(e=>!queuedIds.has(e.id));
   const gItem=g=>`<div class="cm"><a class="b" href="#/games/g/${g.id}"><b>${esc(g.title)} →</b></a> <span class="mu">${esc(gn(g))} · ${AGES[g.age]||"未指定年齡"}</span></div>`;
-  const eItem=e=>`<div class="cm"><a class="b" href="#/events/e/${e.id}"><b>${esc(e.title)} →</b></a> ${orgTag(e)} <span class="mu">${esc(en(e))} · ${tRange(e)} · ${esc(e.city)}${esc(e.district||"")}</span></div>`;
+  const eItem=e=>`<div class="cm"><a class="b" href="#/events/e/${e.id}"><b>${esc(e.title)} →</b></a> ${orgTag(e)} <span class="mu">${esc(en(e))} · ${esc(tRange(e))} · ${esc(e.city)}${esc(e.district||"")}</span>${e.shared_organizer&&importURL(e.link)?` <button data-a="x.queueEvent" data-id="${e.id}">加入建議清單</button>`:""}</div>`;
   const rItem=r=>`<div class="cm">${r.game_id?`<a data-go="#/games/g/${r.game_id}">遊戲：${esc(r.games?.title)}</a>`:r.comment_id?`留言：${esc(r.comments?.body)}${r.comments?.game_id?` <a data-go="#/games/g/${r.comments.game_id}">前往遊戲</a>`:""}`:r.event_id?`<a data-go="#/events/e/${r.event_id}">活動：${esc(r.events?.title)}</a>`:`作者／主辦方：${esc(r.target?.nickname)}${r.target?.suspended?"（已停權）":""} <a data-a="${r.target?.suspended?"x.unsus":"x.sus"}" data-id="${r.target_user_id}">${r.target?.suspended?"解除停權":"停權"}</a>`}<br>原因：${esc(r.reason)} <a data-a="x.delrep" data-id="${r.id}">忽略此檢舉</a></div>`;
   const bItem=u=>`<div class="cm"><a data-go="#/events/org/${u.id}"><b>${esc(u.nickname)}</b></a> <span class="mu">${new Date(u.bio_updated_at).toLocaleDateString("zh-TW")}</span><p style="margin:4px 0 0">${esc(u.bio)}${u.website?" ｜ "+esc(u.website):""}</p></div>`;
   $("#app").innerHTML=`<h2 style="margin:6px 8px 12px">審核</h2>
-  <div class="card-box"><h3 style="margin-top:0">匯入親子活動（試用）</h3><p class="mu">讀取文化部近期活動。勾選後會儲存到這台裝置的「我的帳號 → 活動草稿」。</p><button data-a="x.importculture">讀取文化部活動</button></div>
-  ${secOf(ADM.open,"ag","待審核遊戲",gp.length,gp.map(gItem).join("")||'<p class="mu">沒有待審核的遊戲。</p>')}${secOf(ADM.open,"ae","待審核活動",ep.length,ep.map(eItem).join("")||'<p class="mu">沒有待審核的活動。</p>')}${secOf(ADM.open,"ar","檢舉",rp?.length||0,(rp||[]).map(rItem).join("")||'<p class="mu">沒有檢舉。</p>')}${secOf(ADM.open,"ab","近期修改簡介的商家（14 天內）",rb?.length||0,(rb||[]).map(bItem).join("")||'<p class="mu">近 14 天沒有商家修改簡介。</p>')}${secOf(ADM.open,"as","停權名單",sp?.length||0,(sp||[]).map(u=>`<div class="cm">${esc(u.nickname)} <a data-a="x.unsus" data-id="${u.id}">解除停權</a></div>`).join("")||'<p class="mu">沒有停權的帳號。</p>')}`;
+  <div class="card-box"><h3 style="margin-top:0">匯入親子活動（試用）</h3><p class="mu">讀取文化部近期活動。候選先存到「我的帳號 → 活動草稿」，核對適齡、場次和報名資訊後送審，即會加入下方建議清單。</p><button data-a="x.importculture">讀取文化部活動</button></div>
+  <div id="event-import-queue"></div>
+  ${secOf(ADM.open,"ag","待審核遊戲",gp.length,gp.map(gItem).join("")||'<p class="mu">沒有待審核的遊戲。</p>')}${secOf(ADM.open,"ae","其他待審核活動",otherEvents.length,otherEvents.map(eItem).join("")||'<p class="mu">沒有待審核的活動。</p>')}${secOf(ADM.open,"ar","檢舉",rp?.length||0,(rp||[]).map(rItem).join("")||'<p class="mu">沒有檢舉。</p>')}${secOf(ADM.open,"ab","近期修改簡介的商家（14 天內）",rb?.length||0,(rb||[]).map(bItem).join("")||'<p class="mu">近 14 天沒有商家修改簡介。</p>')}${secOf(ADM.open,"as","停權名單",sp?.length||0,(sp||[]).map(u=>`<div class="cm">${esc(u.nickname)} <a data-a="x.unsus" data-id="${u.id}">解除停權</a></div>`).join("")||'<p class="mu">沒有停權的帳號。</p>')}`;
   hookSec(ADM.open);
+  showImportQueue(queue);
 }
 ACT["x.importculture"]=()=>E.importCulture();
 ACT["a.savebio"]=async()=>{const m=$("#pbm");m.textContent="儲存中…";
@@ -1711,7 +1880,7 @@ async function ROUTE(keep){
   else if(p0==="events")await E.show(p1,p2);
   else if(p0==="account")await accountPage();
   else if(p0==="admin")await adminPage();
-  else if(p0==="resources")await resourcesPage(p1==="official");
+  else if(p0==="resources")await resourcesPage(p1);
   else if(DOCS[p0])doc(p0);
   else if(p0==="share-game"){history.replaceState(null,"","#/games");await G.show();G.openNew()}
   else if(p0==="share-event"){history.replaceState(null,"","#/events");await E.show();E.openNew()}
