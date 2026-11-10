@@ -82,15 +82,20 @@ body .ev.event-card{align-items:flex-start}
   .post-step .r>label{min-width:0;max-width:100%}
   .post-step input[type=file]{max-width:100%}
 }
-.event-filter-quick,.event-quick-dates{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;max-width:480px;margin:10px 0}
-.event-filter-quick button,.event-filter-quick select,.event-quick-dates button,.filter-panel .event-date-picker{box-sizing:border-box;min-height:44px;margin:0;padding:6px;font-size:14px}
-.event-filter-quick select{padding-right:2px}
+body.v-events .event-search-panel{max-width:640px;padding:12px;margin-bottom:12px}
+.event-search-panel .search-wrap{max-width:420px;margin-bottom:8px}
+body.v-events .event-search-panel .search-wrap::before{top:50%;left:12px;transform:translateY(-50%);line-height:1}
+body.v-events .event-search-panel .search-wrap input{min-height:44px;margin:0;padding:7px 12px 7px 35px}
+.event-search-controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 12px}
+.event-filter-quick,.event-quick-dates{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+body.v-events .event-search-controls :is(button,select,.event-date-picker){min-width:0;min-height:44px;margin:0;padding:6px;font-size:14px}
+@media(max-width:640px){.event-search-controls{grid-template-columns:minmax(0,1fr)}}
 .filter-panel .event-date-picker{position:relative;display:grid;place-items:center;text-align:center;background:var(--card);color:var(--tx);border:1px solid var(--bd);border-radius:12px}
 .filter-panel .event-date-picker:focus-within{outline:2px solid var(--ac-dark);outline-offset:2px}
 .filter-panel .event-date-picker input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:pointer}
 .event-date-picker input::-webkit-calendar-picker-indicator{position:absolute;inset:0;width:100%;height:100%;padding:0;cursor:pointer}
 .event-filter-quick button[aria-expanded=true]{background:var(--ac2);color:var(--ac-dark)}
-.event-more-filters{border-top:1px solid var(--bd);padding-top:4px}
+.event-more-filters{border-top:1px solid var(--bd);margin-top:10px;padding-top:4px}
 .event-browse-head{flex-wrap:wrap}
 .event-list-actions{justify-content:space-between}
 body .event-view-controls.r{justify-content:flex-start;gap:0 16px}
@@ -168,6 +173,8 @@ body .event-card .event-links a.b,body .resource-grid a.p,body .detail-official{
 .resource-grid article h3{font-size:17px}
 .resource-filters{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px 12px}
 .resource-filters label{min-width:0}
+.event-detail-meta{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:12px}
+body .event-detail-meta .t{margin:0}
 .detail-block{border-top:1px solid var(--bd);padding:12px 0}
 .detail-block h3{margin:0 0 7px;font-size:17px}
 .detail-block p{margin:5px 0}
@@ -1189,9 +1196,9 @@ function home(){
   const grp=(k,arr)=>arr.map(([v,t])=>`<button data-a="e.ft" data-k="${k}" data-v="${v}" aria-pressed="${S[k].has(String(v))}" class="${S[k].has(String(v))?"on":""}">${t}</button>`).join("");
   const picker=(k,label,items)=>`<select data-event-picker data-k="${k}" aria-label="${label}"><option value="">${label}</option>${items.map(([v,t])=>`<option value="${esc(v)}">${esc(t)}</option>`).join("")}</select>`;
   $("#app").innerHTML=`<div class="section-head hrow event-browse-head"><h2>找親子活動</h2><div class="r"><button class="p" data-a="e.new">＋ 分享活動</button></div></div><p class="mu" style="margin:-4px 8px 12px">查看單場與短期親子活動，依地點、年齡、費用與時間篩選。報名與活動詳情請以主辦方公告為準。</p>
-  ${categoryShortcuts()}<div class="filter-panel"><div class="search-wrap"><input id="q" type="search" aria-label="搜尋活動" placeholder="搜尋活動名稱、說明或地點…" value="${esc(S.q)}"></div>
-  <div class="event-quick-dates">${grp("when",[["today","今天"],["weekend","本週末"]])}<label class="event-date-picker"><span id="event-browse-date-label" aria-hidden="true">選日期</span><input id="event-browse-date" type="date" aria-label="選日期" min="${ymd(taipeiToday())}"></label></div>
-  <div class="event-filter-quick">${picker("city","地區",[ONLINE,...CITIES].map(c=>[c,c]))}${picker("age","年齡",EVENT_AGES.map(([label],i)=>[i,label]))}<button id="event-more-toggle" data-a="e.more" aria-expanded="${S.advOpen}" aria-controls="event-more-filters">更多篩選</button></div>
+  ${categoryShortcuts()}<div class="filter-panel event-search-panel"><div class="search-wrap"><input id="q" type="search" aria-label="搜尋活動" placeholder="搜尋活動名稱、說明或地點…" value="${esc(S.q)}"></div>
+  <div class="event-search-controls"><div class="event-quick-dates">${grp("when",[["today","今天"],["weekend","本週末"]])}<label class="event-date-picker"><span id="event-browse-date-label" aria-hidden="true">選日期</span><input id="event-browse-date" type="date" aria-label="選日期" min="${ymd(taipeiToday())}"></label></div>
+  <div class="event-filter-quick">${picker("city","地區",[ONLINE,...CITIES].map(c=>[c,c]))}${picker("age","年齡",EVENT_AGES.map(([label],i)=>[i,label]))}<button id="event-more-toggle" data-a="e.more" aria-expanded="${S.advOpen}" aria-controls="event-more-filters">更多篩選</button></div></div>
   <div class="event-more-filters" id="event-more-filters" ${S.advOpen?"":"hidden"}>
   <div class="filter-label">日期範圍（可複選）</div><div class="filter-row">${grp("when",[["7d","7 天內"],["month","本月"]])}</div>
   <div class="filter-label">時段（可複選）</div><div class="filter-row">${grp("tod",[["am","早上"],["pm","下午"],["ev","晚上"]])}</div>
@@ -1304,7 +1311,7 @@ function detailHTML(e,quick=false,selectedDay,selectedSlot){
   const programs=category==="exhibition"?S.ev.filter(row=>row.related_exhibition_id===id&&row.status==="approved"&&listingType(row)==="event"&&upcomingSlots(row).length):[];
   return `${quick?"":`<p>${canReview(e)?'<a href="#/admin">← 返回審核</a>':back}</p>`}<div class="card-box"><h2 ${quick?'id="event-quick-title"':""} style="margin:0 0 8px">${esc(e.title)}</h2>
   ${e.status!=="approved"?`<p class="rule">${e.status==="pending"?"審核中，目前只有你和管理員看得到。":"已被退回："+esc(e.reject_reason)+"。修改後可重新送審。"}</p>`:""}
-  <div>${orgTag(e)}<span class="t ag">${esc(ageTxt(e))}</span><span class="t">${AUD[e.audience]||"親子"}</span><span class="t ${e.fee?"":"ok"}">${feeTxt(e)}</span></div>
+  <div class="event-detail-meta">${orgTag(e)}<span class="t ag">${esc(ageTxt(e))}</span><span class="t">${AUD[e.audience]||"親子"}</span><span class="t ${e.fee?"":"ok"}">${feeTxt(e)}</span></div>
   ${e.photo?`<img class="big" decoding="async" src="${pub(e.photo)}" alt="" style="max-width:460px">`:""}
   <section class="detail-block"><h3>${category==="exhibition"?"展期":"場次（台灣時間）"}</h3>
   ${category==="exhibition"?`<p>${esc(exhibitionDates(e))} ${exhibitionEnded(e)?'<span class="t event-booking-closed">已結束</span>':""}</p>${selectedDay&&selectedDay>=exhibitionPeriod(e)[0]&&selectedDay<=exhibitionPeriod(e)[1]?`<p>想去的日期：${esc(selectedDay)}</p>`:""}`:
