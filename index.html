@@ -422,7 +422,8 @@ const dayLines=e=>{if(e.schedule&&e.schedule.length)return e.schedule.map(x=>fda
   const s=new Date(e.start_at),n=endT(e),t=hm(s)+(n?"–"+hm(n):""),ds=daysOf(e);
   if(e.continuous)return"開始："+fdate(s)+" "+hm(s)+"<br>結束："+fdate(new Date(e.end_at))+(n?" "+hm(n):"");
   return ds.length<=7||(e.dates&&e.dates.length)?ds.map(d=>fdate(d)+" "+t).join("<br>"):fdate(ds[0])+" 至 "+fdate(ds[ds.length-1])+"<br>每天 "+t};
-const ageTxt=e=>e.age_min===0&&e.age_max===12?"各年齡":e.age_min===e.age_max?e.age_min+" 歲":e.age_min+"–"+e.age_max+" 歲";
+const EVENT_AGES=[["0–1 歲",0,1],["1–2 歲",1,2],["2–3 歲",2,3],["3–4 歲",3,4],["4–6 歲",4,6],["6 歲以上",6,12],["小一～小二",6,8],["小三～小四",8,10],["小五～小六",10,12]];
+const ageTxt=e=>e.age_min===0&&e.age_max===12?"各年齡":EVENT_AGES.filter(([label,a,b])=>a===e.age_min&&b===e.age_max).map(x=>x[0])[0]||(e.age_min===e.age_max?e.age_min+" 歲":e.age_min+"–"+e.age_max+" 歲");
 const feeTxt=e=>e.fee?"NT$ "+e.fee:"免費";
 const nick=e=>e.profiles?.nickname||"主辦方";
 const orgTag=e=>isOrg(e)?'<span class="t org">商家／機構</span>':'<span class="t">個人</span>';
@@ -487,12 +488,12 @@ function list(){
     const ds=daysOf(e).map(d=>[d,Math.round((d-t0)/864e5)]);
     if(S.favOnly&&!hasE(S.efavs,e.id))return false;
     if(S.city.size&&!S.city.has(e.city))return false;
-    if(S.age.size&&![...S.age].some(a=>e.age_min<=+a&&+a<=e.age_max))return false;
+    if(S.age.size&&![...S.age].some(i=>{const x=EVENT_AGES[+i];return x&&e.age_min<=x[2]&&e.age_max>=x[1]}))return false;
     if(S.fee.size&&![...S.fee].some(f=>f==="free"?e.fee===0:f==="paid"?e.fee>0:e.fee<=+f))return false;
     if(S.org.size&&!S.org.has(e.profiles?.account_type))return false;
     if(S.aud.size&&!S.aud.has(e.audience))return false;
-    if(S.tod.size){const rs=todRs(e);if(![...S.tod].some(t=>t==="all"?(e.flex_time||rs.some(([a,b])=>b-a>=8)):rs.some(([a,b])=>a<TOD[t][1]&&b>TOD[t][0])))return false}
-    if(q&&!(e.title+e.description+(e.venue||"")+(e.district||"")+e.city).toLowerCase().includes(q))return false;
+    if(S.tod.size){const rs=todRs(e);if(![...S.tod].some(t=>TOD[t]&&rs.some(([a,b])=>a<TOD[t][1]&&b>TOD[t][0])))return false}
+    if(q&&!(e.title+" "+(e.description||"")+" "+(e.venue||"")+" "+(e.district||"")+" "+(e.city||"")+" "+(e.profiles?.nickname||"")).toLowerCase().includes(q))return false;
     if(S.when.size&&![...S.when].some(w=>w==="today"?ds.some(x=>x[1]===0):w==="weekend"?ds.some(x=>[0,6].includes(x[0].getDay())&&x[1]>=0&&x[1]<=6):w==="7d"?ds.some(x=>x[1]>=0&&x[1]<=7):ds.some(x=>x[0].getMonth()===now.getMonth()&&x[0].getFullYear()===now.getFullYear())))return false;
     return true;
   }).sort((a,b)=>nextEventDate(a)-nextEventDate(b));
@@ -507,7 +508,7 @@ function cal(base){
 }
 function ecard(e){
   const st=new Date(e.start_at);
-  return `<div class="ev" role="link" tabindex="0" aria-label="查看活動：${esc(e.title)}" data-go="#/events/e/${e.id}"><div class="dt"><b>${st.getMonth()+1}/${st.getDate()}</b><span>${multi(e)?"至 "+md(d0(endOf(e))):"週"+WK[st.getDay()]}</span></div><div class="eb"><b>${esc(e.title)}</b><div class="mu">${tRange(e)} · ${esc(e.city)}${esc(e.district||"")}${e.venue?" · "+esc(e.venue):""}</div><div><span class="t ag">${ageTxt(e)}</span><span class="t">${AUD[e.audience]||"親子"}</span><span class="t ${e.fee?"":"ok"}">${feeTxt(e)}</span>${orgTag(e)}</div><div class="mu" style="margin-top:4px">♥ ${cntE(S.elikes,e.id)} · ★ ${cntE(S.efavs,e.id)} · 瀏覽 ${Number(e.view_count||0)}</div></div></div>`;
+  return `<div class="ev" role="link" tabindex="0" aria-label="查看活動：${esc(e.title)}" data-go="#/events/e/${e.id}"><div class="dt"><b>${st.getMonth()+1}/${st.getDate()}</b><span>${multi(e)?"至 "+md(d0(endOf(e))):"週"+WK[st.getDay()]}</span></div><div class="eb"><b>${esc(e.title)}</b><div class="mu">主辦：${esc(nick(e))}</div><div class="mu">${tRange(e)} · ${esc(e.city)}${esc(e.district||"")}${e.venue?" · "+esc(e.venue):""}</div><div><span class="t ag">${ageTxt(e)}</span><span class="t">${AUD[e.audience]||"親子"}</span><span class="t ${e.fee?"":"ok"}">${feeTxt(e)}</span>${orgTag(e)}</div><div class="mu" style="margin-top:4px">♥ ${cntE(S.elikes,e.id)} · ★ ${cntE(S.efavs,e.id)} · 瀏覽 ${Number(e.view_count||0)}</div></div></div>`;
 }
 function home(){
   const grp=(k,arr)=>arr.map(([v,t])=>`<button data-a="e.ft" data-k="${k}" data-v="${v}" class="${S[k].has(String(v))?"on":""}">${t}</button>`).join("");
@@ -518,7 +519,7 @@ function home(){
   <div class="filter-label">時段（可複選）</div><div class="filter-row">${grp("tod",[["am","早上"],["pm","下午"],["ev","晚上"]])}</div>
   <details class="advanced" ${S.advOpen?"open":""}><summary>更多篩選條件（地點、年齡、費用、對象、主辦方，皆可複選）</summary>
   <div class="filter-label">縣市</div><div class="filter-row">${grp("city",CITIES.map(c=>[c,c]))}</div>
-  <div class="filter-label">孩子年齡</div><div class="filter-row">${grp("age",Array.from({length:13},(_,i)=>[i,i+" 歲"]))}</div>
+  <div class="filter-label">孩子年齡</div><div class="filter-row">${grp("age",EVENT_AGES.map(([label],i)=>[i,label]))}</div>
   <div class="filter-label">費用</div><div class="filter-row">${grp("fee",[["free","免費"],["500","500 元以內"],["1000","1000 元以內"],["paid","付費"]])}</div>
   <div class="filter-label">參與對象</div><div class="filter-row">${grp("aud",[["family","親子"],["kids","只有孩子"],["parents","只有家長"]])}</div>
   <div class="filter-label">主辦方</div><div class="filter-row">${grp("org",[["personal","個人"],["organization","商家／機構"]])}</div></details>
@@ -536,7 +537,7 @@ function draw(){
   document.querySelectorAll("[data-a='e.sort']").forEach(b=>b.classList.toggle("on",b.dataset.v===S.sort));
   $("#cal").innerHTML=cal(base);
   $("#fcount").textContent=`找到 ${base.length} 筆活動`+(S.day?" · 已選日期":"");
-  const active=[],labels={today:"今天",weekend:"本週末","7d":"7 天內",month:"本月",am:"早上",pm:"下午",ev:"晚上",free:"免費",paid:"付費",family:"親子",kids:"只有孩子",parents:"只有家長",personal:"個人主辦",organization:"商家／機構"};for(const k of ["when","city","age","fee","org","aud","tod"])for(const v of S[k])active.push(k==="city"?v:k==="age"?v+" 歲":(labels[v]||v));if(S.favOnly)active.push("只看收藏");if(S.q.trim())active.push("搜尋："+S.q.trim());
+  const active=[],labels={today:"今天",weekend:"本週末","7d":"7 天內",month:"本月",am:"早上",pm:"下午",ev:"晚上",free:"免費",paid:"付費",family:"親子",kids:"只有孩子",parents:"只有家長",personal:"個人主辦",organization:"商家／機構"};for(const k of ["when","city","age","fee","org","aud","tod"])for(const v of S[k])active.push(k==="city"?v:k==="age"?(EVENT_AGES[+v]?.[0]||v):(labels[v]||v));if(S.favOnly)active.push("只看收藏");if(S.q.trim())active.push("搜尋："+S.q.trim());
   const chipBox=document.querySelector("#active-event-filters");if(chipBox)chipBox.innerHTML=active.map(x=>`<span>${esc(x)}</span>`).join("");
   $("#lt").textContent=S.day?S.day.replace(/-/g,"/")+" 的活動（"+l.length+"）":(S.sort==="new"?"最新活動":"近期活動")+"（"+l.length+"）";
   $("#el").innerHTML=(S.day?'<button data-a="e.day" data-k="">顯示全部日期</button>':"")+(l.map(ecard).join("")||`<p class="mu">${S.ev.length?"沒有符合條件的活動，換個條件試試看。":"還沒有活動，歡迎主辦方分享！"}</p>`);
