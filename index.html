@@ -244,7 +244,7 @@ if(TURNSTILE_KEY){const sc=document.createElement("script");sc.src="https://chal
 const AUTH={u:null,me:null};
 const ACT={};
 const $=s=>document.querySelector(s),esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-const canReview=post=>AUTH.me?.is_admin&&post?.status==="pending";
+const canReview=post=>AUTH.me?.is_admin&&!AUTH.me.suspended&&post?.status==="pending";
 function reviewActions(type,post,reasons){
   if(!canReview(post))return "";
   return `<section class="card-box" style="margin-top:16px" aria-label="投稿審核"><div class="r"><button class="p" data-a="${type}.approve" data-id="${post.id}">核准</button><button class="d" data-a="review.reasons" aria-expanded="false" aria-controls="review-reasons">退回</button></div><div id="review-reasons" hidden><p class="mu">請選擇退回原因</p><div class="r">${reasons.map(reason=>`<button class="d" data-a="${type}.reject" data-id="${post.id}" data-r="${esc(reason)}">${esc(reason)}</button>`).join("")}</div></div></section>`;
@@ -438,9 +438,15 @@ function submissionSuccess(type,ctx){
   if(ctx?.saved){
     try{removeDraft(type,ctx.id,ctx.uid)}catch(e){}
   }
-  const msg=type==="game"?"遊戲投稿已送出，審核通過後就會公開。":"活動投稿已送出，審核通過後就會公開。";
-  try{sessionStorage.setItem("ideas_submission_notice",msg)}catch(e){}
-  if(activeDraft===ctx){ctx.submitting=false;shut();go("#/account");showToast(msg)}
+  const imported=type==="event"&&ctx.extra().culture&&AUTH.me?.is_admin;
+  const msg=imported?"已加入建議清單，可在審核頁核對並發布。":type==="game"?"遊戲投稿已送出，審核通過後就會公開。":"活動投稿已送出，審核通過後就會公開。";
+  if(!imported)try{sessionStorage.setItem("ideas_submission_notice",msg)}catch(e){}
+  if(activeDraft===ctx){
+    ctx.submitting=false;shut();
+    if(imported){ADM.importPeriod="all";E.reset()}
+    go(imported?"#/admin":"#/account");
+    showToast(msg);
+  }
 }
 function visitorId(){try{let id=localStorage.getItem("ideas_visitor_id");if(!id){id=crypto.randomUUID();localStorage.setItem("ideas_visitor_id",id)}return id}catch(e){return "visitor-"+Math.random().toString(36).slice(2)+Date.now()}}
 async function trackView(type,id,item){
@@ -478,22 +484,15 @@ async function savePost(ctx,table,row,files,previous,photoFields,importOrigin){
     }
     if(AUTH.u?.id!==ctx.uid)throw new Error("登入狀態已變更，請重新登入。");
     const data={...row,...photoFields(files.length?uploaded:previous),status:"pending",reject_reason:null};
-    const result=ctx.postId
+    const result=importOrigin
+      ?await sb.rpc("submit_culture_event",{p_event:data,p_source_url:importOrigin.link,p_source_key:importOrigin.uid})
+      :ctx.postId
       ?await sb.from(table).update(data).eq("id",ctx.postId).select("id").single()
-      :await (importOrigin?sb.from(table).insert({...data,author_id:ctx.uid}).select("id").single():sb.from(table).insert({...data,author_id:ctx.uid}));
+      :await sb.from(table).insert({...data,author_id:ctx.uid});
     if(result.error){
       // A lost response can leave the outcome unknown. Keep potentially referenced files.
       if(result.status===0||result.status>=500)uploaded.length=0;
       throw result.error;
-    }
-    if(importOrigin){
-      try{
-        const {error}=await sb.from("event_import_suggestions").insert({event_id:result.data.id,...importOrigin});
-        if(error)throw error;
-      }catch(error){
-        console.warn("已送審，但未加入建議清單。",error);
-        alert("活動已送審。可從審核頁的「待審核活動」補加入建議清單。");
-      }
     }
   }catch(err){
     if(uploaded.length)await storage.remove(uploaded).catch(()=>{});
@@ -1439,7 +1438,7 @@ function form(e,draft,template,append=false){
   </section><section class="post-step" hidden><h4 tabindex="-1">照片與送審</h4><p class="post-preview"></p>
   ${imported?'<label><input id="event-confirm-availability" type="checkbox" style="width:auto"> 已在官方頁面確認免報名，或所填場次目前仍可報名／購票</label>':""}
   <label>活動照片（選填，1 張${editing?"；不選就保留原圖":""}）<input id="event-fp" type="file" accept="image/*"></label>
-  </section>${postActions("event",editing?"儲存並重新送審":"送出審核")}</div>`);
+  </section>${postActions("event",imported?"加入待發布清單":editing?"儲存並重新送審":"送出審核")}</div>`);
   const val=id=>$("#event-"+id)?.value.trim()||"";
   const ageMode=$("#event-age-preset"),file=()=>$("#event-fp").files[0];
   const showAges=()=>{$("#event-custom-ages").hidden=ageMode.value!=="custom"};
@@ -1521,7 +1520,7 @@ function form(e,draft,template,append=false){
           title:val("ft"),description:val("fh"),city:online()?ONLINE:val("fc"),district:online()?null:val("fz")||null,
           venue:online()?null:val("fv")||null,address:!online()&&org?val("fad"):null,age_min,age_max,fee:+val("ff"),fee_note:val("fn")||null,
           shared_organizer:shared()?val("organizer"):null,link:val("fl")||null,map_link:online()?null:val("fmp")||null,audience:val("fau")};
-        const origin=imported&&AUTH.me?.is_admin&&cultureURL(imported.link)?{source_name:"文化部開放資料",source_url:cultureURL(imported.link)}:null;
+        const origin=imported?{uid:imported.uid||ctx.id.replace(/^moc-/,""),link:cultureURL(imported.link)}:null;
         await savePost(ctx,"events",row,file()?[file()]:[],editing?.photo?[editing.photo]:[],photos=>({photo:photos[0]||null}),origin);
         T=0;
       }
@@ -1529,6 +1528,7 @@ function form(e,draft,template,append=false){
   });
 }
 const CULTURE_FEED="https://cloud.culture.tw/frontsite/trans/SearchShowAction.do?method=doFindTypeJ&category=4";
+const CULTURE_SNAPSHOT="https://raw.githubusercontent.com/joyunliu/ideas-together/culture-feed/culture-feed.json";
 const cultureText=value=>typeof value==="string"?value.trim():"";
 function cultureURL(value){
   try{
@@ -1542,8 +1542,8 @@ function cultureCandidates(items,now){
   return items.flatMap(row=>{
     const uid=cultureText(row?.UID),title=cultureText(row?.title);
     const first=date(row?.startDate),last=date(row?.endDate);
-    if(!uid||seen.has(uid)||!title||!/^\d{4}-\d{2}-\d{2}$/.test(first)||!/^\d{4}-\d{2}-\d{2}$/.test(last))return [];
-    if(last<today||first>until||last<first||last>until)return [];
+    if(!uid||uid.length>100||seen.has(uid)||!title||!/^\d{4}-\d{2}-\d{2}$/.test(first)||!/^\d{4}-\d{2}-\d{2}$/.test(last))return [];
+    if(last<today||first>until||last<first)return [];
     const sales=cultureURL(row.webSales),link=cultureURL(row.sourceWebPromote)||sales;
     if(!link)return [];
     seen.add(uid);
@@ -1592,54 +1592,58 @@ function cultureDraft(item,createdAt){
     if(item.endTime){add("fe1h",item.endTime.slice(0,2),"select-one");add("fe1m",item.endTime.slice(3))}
   }
   const dates=item.first===item.last?item.first:`${item.first} ～ ${item.last}（場次請查官方頁）`;
-  return {type:"event",postId:null,createdAt,fields,step:0,culture:{title:item.title,dates,price:item.price,link:item.link,sales:item.sales}};
+  return {id:"moc-"+item.uid,type:"event",postId:null,createdAt,fields,step:0,culture:{uid:item.uid,title:item.title,dates,price:item.price,link:item.link,sales:item.sales}};
 }
-async function importCulture(){
+async function importCulture(refresh=false){
   const uid=AUTH.u?.id;
   if(!uid||!AUTH.me?.is_admin||AUTH.me.suspended)return;
   modal(`<h3>匯入文化部活動</h3><p id="culture-message" class="mu" role="status">讀取中…</p><div id="culture-choices"></div>`);
   const message=$("#culture-message"),choices=$("#culture-choices");
   const allowed=()=>message.isConnected&&AUTH.u?.id===uid&&AUTH.me?.is_admin&&!AUTH.me.suspended;
   try{
-    const response=await fetch(CULTURE_FEED,{cache:"no-store",signal:AbortSignal.timeout(15000)});
-    if(!response.ok)throw new Error("feed");
-    const rows=await response.json();
-    if(!Array.isArray(rows))throw new Error("format");
+    const snapshot=fetch(CULTURE_SNAPSHOT,{cache:"no-store",signal:AbortSignal.timeout(5000)})
+      .then(response=>response.ok?response.json():null).catch(()=>null);
+    const submitted=sb.from("event_import_suggestions").select("source_key,events!inner(status)")
+      .not("source_key","is",null).in("events.status",["pending","approved"]);
+    const [cached,existing]=await Promise.all([snapshot,submitted]);
+    let rows=cached?.items,fetchedAt=cached?.fetched_at,liveError=false;
+    if(refresh||!Array.isArray(rows)){
+      try{
+        const response=await fetch(CULTURE_FEED,{cache:"no-store",signal:AbortSignal.timeout(15000)});
+        if(!response.ok)throw new Error("feed");
+        const latest=await response.json();
+        if(!Array.isArray(latest))throw new Error("format");
+        rows=latest;
+        fetchedAt=new Date().toISOString();
+      }catch(error){liveError=true}
+    }
+    if(!Array.isArray(rows))throw new Error("feed");
     if(!allowed())return;
     const items=cultureCandidates(rows,new Date());
-    const key=item=>draftPrefix("event",uid)+"moc-"+item.uid;
-    const posted=item=>S.ev.some(e=>e.author_id===uid&&e.status!=="rejected"&&cultureURL(e.link)===item.link&&e.title===item.title.slice(0,20));
-    const available=item=>!localStorage.getItem(key(item))&&!posted(item);
-    const render=()=>{
-      choices.innerHTML=items.map((item,i)=>`<div class="cm">
-        <label><input type="checkbox" value="${i}" style="width:auto" ${available(item)?"":"disabled"}> ${esc(item.title)}${available(item)?"":"（已存草稿或投稿）"}</label>
-        <div class="mu">${esc(item.first)}${item.last===item.first?"":" ～ "+esc(item.last)} · ${esc([item.city,item.venue].filter(Boolean).join(" ")||"地點待確認")}</div>
-        <a href="${esc(item.link)}" target="_blank" rel="noopener noreferrer">原始連結</a></div>`).join("")+
-        (items.length?'<button class="p" id="culture-save">將勾選項目存成草稿</button> <button data-go="#/account">前往我的帳號</button>':"");
-      if(!items.length)return;
-      $("#culture-save").onclick=()=>{
-        if(!allowed())return;
-        const selected=[...choices.querySelectorAll("input:checked")].map(input=>items[Number(input.value)]);
-        if(!selected.length){message.textContent="請先勾選活動。";return}
-        let saved=0;
-        try{
-          const createdAt=new Date().toISOString();
-          for(const item of selected){
-            if(!available(item))continue;
-            localStorage.setItem(key(item),JSON.stringify(cultureDraft(item,createdAt)));
-            saved++;
-          }
-          render();
-          message.textContent=saved?`已儲存 ${saved} 份活動草稿。請到「我的帳號」核對內容。`:"勾選的活動已有草稿或投稿。";
-        }catch(e){
-          message.textContent=`已儲存 ${saved} 份活動草稿。其餘項目無法儲存，請確認瀏覽器儲存空間。`;
-        }
-      };
-    };
-    render();
-    message.textContent=items.length?`找到 ${items.length} 筆未結束、30 天內結束且附原始連結的候選活動。名額和適齡資訊請到官方頁面核對。`:"目前沒有符合匯入條件的活動。";
+    const sourceKeys=new Set((existing.data||[]).map(row=>row.source_key));
+    const posted=item=>sourceKeys.has("culture:"+item.uid)||S.ev.some(e=>e.status!=="rejected"&&cultureURL(e.link)===item.link&&e.title===item.title.slice(0,20));
+    const drafts=new Map(readDrafts("event").map(draft=>[draft.id,draft]));
+    choices.innerHTML='<button id="culture-reload">即時更新來源</button>'+items.map((item,i)=>`<article class="cm">
+      <b>${esc(item.title)}</b>
+      <p class="mu">${esc(item.first)}${item.last===item.first?"":" ～ "+esc(item.last)} · ${esc([item.city,item.venue].filter(Boolean).join(" ")||"地點待確認")}</p>
+      <div class="r"><a href="${esc(item.link)}" target="_blank" rel="noopener noreferrer">查看來源 ↗</a>
+      ${posted(item)?'<span class="mu">已送審或發布</span>':`<button class="p" data-culture-index="${i}">${drafts.has("moc-"+item.uid)?"繼續核對":"核對並匯入"}</button>`}</div></article>`).join("");
+    $("#culture-reload").onclick=()=>importCulture(true);
+    choices.querySelectorAll("[data-culture-index]").forEach(button=>button.onclick=()=>{
+      if(!allowed())return;
+      const item=items[Number(button.dataset.cultureIndex)];
+      const saved=drafts.get("moc-"+item.uid);
+      form(null,saved||cultureDraft(item,new Date().toISOString()));
+      if(!saved)saveActiveDraft(true);
+    });
+    message.textContent=(liveError?"即時來源讀取失敗，以下為上次更新。":"")+
+      `資料時間 ${importDateTime.format(new Date(fetchedAt))}。目前有 ${items.length} 筆候選，請到官方頁核對場次、適齡和報名資訊。`;
   }catch(e){
-    if(allowed())message.textContent="暫時無法讀取文化部活動或瀏覽器草稿，請稍後再試。";
+    if(allowed()){
+      message.textContent="暫時無法讀取文化部活動，請稍後再試。";
+      choices.innerHTML='<button id="culture-reload">重試</button>';
+      $("#culture-reload").onclick=()=>importCulture(true);
+    }
   }
 }
 
@@ -1876,7 +1880,7 @@ ${categoryShortcuts()}<section class="home-feed"><div class="home-feed-head"><h3
 <section class="home-feed"><div class="home-feed-head"><h3>最新遊戲分享</h3><a href="#/games">瀏覽全部遊戲 →</a></div>${gameHtml}</section>
 <div class="share"><h3>一起分享，讓更多家庭找到好點子</h3><p>你可以刊登自己主辦的活動、轉貼公開親子活動，或分享居家遊戲。本站不代收報名與費用。</p><div class="share-actions"><a class="primary" href="#/share-event">分享活動</a><a href="#/share-game">分享遊戲</a></div></div>`;
 }
-const ACC={tab:"posts",open:{}},ADM={open:{}};
+const ACC={tab:"posts",open:{}},ADM={open:{},importPeriod:"all"};
 const secOf=(st,k,t,n,body)=>`<details class="sec" data-k="${k}" ${st[k]!==false?"open":""}><summary><h3>${t}（${n}）</h3></summary>${body}</details>`;
 const hookSec=st=>document.querySelectorAll("#app details.sec").forEach(d=>{d.ontoggle=()=>{st[d.dataset.k]=d.open}});
 async function accountPage(){
@@ -1968,7 +1972,7 @@ function showImportQueue(queue){
     panel.innerHTML='<section class="card-box"><h3>建議匯入與更新</h3><p class="mu">目前讀不到建議清單。</p><button data-a="x.reloadQueue">重試</button></section>';
     return;
   }
-  const rows=importPeriod(queue.rows,ADM.importPeriod||"week");
+  const rows=importPeriod(queue.rows,ADM.importPeriod);
   const cards=rows.map(row=>{
     const fields=Object.entries(row.changes),update=fields.length>0;
     const old=row.base_record,proposed={...old,...row.changes};
@@ -1985,7 +1989,7 @@ function showImportQueue(queue){
   }).join("");
   panel.innerHTML=`<section class="card-box" aria-labelledby="event-import-title"><h3 id="event-import-title" style="margin-top:0">建議匯入與更新</h3>
     <p class="mu">先核對來源和內容，再勾選要一次發布的項目。更新建議會套用到原活動。</p>
-    <div class="r">${Object.entries(IMPORT_PERIODS).map(([key,label])=>`<button data-import-period="${key}" aria-pressed="${(ADM.importPeriod||"week")===key}" class="${(ADM.importPeriod||"week")===key?"on":""}">${label}（${importPeriod(queue.rows,key).length}）</button>`).join("")}</div>
+    <div class="r">${Object.entries(IMPORT_PERIODS).map(([key,label])=>`<button data-import-period="${key}" aria-pressed="${ADM.importPeriod===key}" class="${ADM.importPeriod===key?"on":""}">${label}（${importPeriod(queue.rows,key).length}）</button>`).join("")}</div>
     ${rows.length?`<fieldset style="padding:0;margin:0;border:0;min-width:0" aria-label="選擇要發布的活動">
       <div class="r import-toolbar"><label class="import-select-all"><input id="import-all" type="checkbox"> 全選這一頁</label><button class="p" id="import-publish" disabled>審核並發布所選</button><span class="mu" id="import-count" role="status"></span></div>${cards}
     </fieldset>`:'<p class="mu">這個期間沒有待發布的建議。</p>'}
@@ -2010,7 +2014,7 @@ function showImportQueue(queue){
   publish.onclick=async()=>{
     if(!AUTH.me?.is_admin||AUTH.me.suspended)return;
     const ids=boxes.filter(box=>box.checked).map(box=>box.dataset.importId);
-    if(!ids.length)return;
+    if(!ids.length||!confirm(`確定將所選的 ${ids.length} 筆建議發布到網站？`))return;
     const fieldset=publish.closest("fieldset"),message=panel.querySelector("#import-message");
     fieldset.disabled=true;
     panel.querySelectorAll("[data-import-period]").forEach(button=>button.disabled=true);
@@ -2062,11 +2066,12 @@ async function adminPage(){
   const rItem=r=>`<div class="cm">${r.game_id?`<a data-go="#/games/g/${r.game_id}">遊戲：${esc(r.games?.title)}</a>`:r.comment_id?`留言：${esc(r.comments?.body)}${r.comments?.game_id?` <a data-go="#/games/g/${r.comments.game_id}">前往遊戲</a>`:""}`:r.event_id?`<a data-go="#/events/e/${r.event_id}">活動：${esc(r.events?.title)}</a>`:`作者／主辦方：${esc(r.target?.nickname)}${r.target?.suspended?"（已停權）":""} <a data-a="${r.target?.suspended?"x.unsus":"x.sus"}" data-id="${r.target_user_id}">${r.target?.suspended?"解除停權":"停權"}</a>`}<br>原因：${esc(r.reason)} <a data-a="x.delrep" data-id="${r.id}">忽略此檢舉</a></div>`;
   const bItem=u=>`<div class="cm"><a data-go="#/events/org/${u.id}"><b>${esc(u.nickname)}</b></a> <span class="mu">${new Date(u.bio_updated_at).toLocaleDateString("zh-TW")}</span><p style="margin:4px 0 0">${esc(u.bio)}${u.website?" ｜ "+esc(u.website):""}</p></div>`;
   $("#app").innerHTML=`<h2 style="margin:6px 8px 12px">審核</h2>
-  <div class="card-box"><h3 style="margin-top:0">匯入親子活動（試用）</h3><p class="mu">讀取文化部近期活動。候選先存到「我的帳號 → 活動草稿」，核對適齡、場次和報名資訊後送審，即會加入下方建議清單。</p><button data-a="x.importculture">讀取文化部活動</button></div>
+  ${!AUTH.me.suspended?`<div class="card-box"><h3 style="margin-top:0">匯入親子活動</h3><p class="mu">每天上午更新文化部候選活動，也可以即時讀取。核對官方資訊後加入下方清單，勾選要發布的活動。</p><button data-a="x.importculture">查看候選活動</button><div id="culture-drafts"></div></div>`:""}
   <div id="event-import-queue"></div>
   ${secOf(ADM.open,"ag","待審核遊戲",gp.length,gp.map(gItem).join("")||'<p class="mu">沒有待審核的遊戲。</p>')}${secOf(ADM.open,"ae","其他待審核活動",otherEvents.length,otherEvents.map(eItem).join("")||'<p class="mu">沒有待審核的活動。</p>')}${secOf(ADM.open,"ar","檢舉",rp?.length||0,(rp||[]).map(rItem).join("")||'<p class="mu">沒有檢舉。</p>')}${secOf(ADM.open,"ab","近期修改簡介的商家（14 天內）",rb?.length||0,(rb||[]).map(bItem).join("")||'<p class="mu">近 14 天沒有商家修改簡介。</p>')}${secOf(ADM.open,"as","停權名單",sp?.length||0,(sp||[]).map(u=>`<div class="cm">${esc(u.nickname)} <a data-a="x.unsus" data-id="${u.id}">解除停權</a></div>`).join("")||'<p class="mu">沒有停權的帳號。</p>')}`;
   hookSec(ADM.open);
   showImportQueue(queue);
+  refreshDraftList();
 }
 ACT["x.importculture"]=()=>E.importCulture();
 ACT["a.savebio"]=async()=>{const m=$("#pbm");m.textContent="儲存中…";
@@ -2076,6 +2081,14 @@ ACT["a.savebio"]=async()=>{const m=$("#pbm");m.textContent="儲存中…";
 ACT["a.tab"]=el=>{ACC.tab=el.dataset.v;ROUTE(true)};
 function refreshDraftList(){
   const box=$("#draft-list");
+  const culture=$("#culture-drafts");
+  if(culture){
+    const drafts=readDrafts("event").filter(draft=>draft.culture);
+    culture.innerHTML=drafts.length?`<h4>尚未完成的匯入草稿（${drafts.length}）</h4>
+      <p class="mu">草稿儲存在目前這台裝置。</p>${drafts.map(draft=>`<div class="cm"><b>${esc(draft.culture.title)}</b><div class="r">
+      <button data-a="draft.open" data-type="event" data-id="${esc(draft.id)}">繼續核對</button>
+      <button class="d" data-a="draft.delete" data-type="event" data-id="${esc(draft.id)}">刪除草稿</button></div></div>`).join("")}`:"";
+  }
   if(!box)return;
   const group=(type,label)=>{
     const drafts=readDrafts(type);

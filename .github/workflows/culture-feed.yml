@@ -1,0 +1,59 @@
+name: Update culture activity candidates
+
+on:
+  schedule:
+    - cron: '13 1 * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/culture-feed.yml']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: culture-feed
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Fetch and validate the public source
+        env:
+          FEED_URL: https://cloud.culture.tw/frontsite/trans/SearchShowAction.do?method=doFindTypeJ&category=4
+        run: |
+          curl --fail --silent --show-error --retry 2 --max-time 30 "$FEED_URL" -o "$RUNNER_TEMP/culture-source.json"
+          python3 - <<'PY'
+          import json
+          import os
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          temp = Path(os.environ["RUNNER_TEMP"])
+          source = json.loads((temp / "culture-source.json").read_text(encoding="utf-8-sig"))
+          if not isinstance(source, list) or (source and not any(
+              isinstance(row, dict) and row.get("UID") and row.get("startDate") for row in source
+          )):
+              raise SystemExit("Culture feed returned an invalid format")
+          fields = ("UID", "title", "startDate", "endDate", "webSales", "sourceWebPromote", "showInfo", "masterUnit")
+          items = [{key: row[key] for key in fields if key in row} for row in source if isinstance(row, dict)]
+          snapshot = {"fetched_at": datetime.now(timezone.utc).isoformat(), "items": items}
+          (temp / "culture-feed.json").write_text(json.dumps(snapshot, ensure_ascii=False), encoding="utf-8")
+          print(f"Fetched {len(items)} source records")
+          PY
+      - name: Publish the candidate snapshot
+        run: |
+          if git ls-remote --exit-code --heads origin culture-feed; then
+            git fetch --depth=1 origin culture-feed
+            git switch -c culture-feed FETCH_HEAD
+          else
+            status=$?
+            if [ "$status" -ne 2 ]; then exit "$status"; fi
+            git switch --orphan culture-feed
+          fi
+          cp "$RUNNER_TEMP/culture-feed.json" culture-feed.json
+          git add culture-feed.json
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'Refresh culture activity candidates'
+          git push origin HEAD:refs/heads/culture-feed
