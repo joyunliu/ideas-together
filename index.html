@@ -1036,9 +1036,9 @@ function home(){
   <div class="filter-label">參與對象</div><div class="filter-row">${grp("aud",[["family","親子"],["kids","只有孩子"],["parents","只有家長"]])}</div>
   <div class="filter-label">活動來源</div><div class="filter-row">${grp("org",[["personal","個人主辦"],["organization","商家／機構主辦"],["shared","轉貼他人活動"]])}</div></div></details>
   <div class="filter-actions"><span class="filter-count" id="fcount" aria-live="polite"></span><button data-a="e.clr">清除所有篩選</button></div><div class="filter-chips" id="active-event-filters"></div></div>
+  <section class="calendar-panel" aria-labelledby="event-calendar-title"><h3 id="event-calendar-title">活動日曆</h3><p class="mu" style="margin:0 0 10px">點選有活動的日期，下方會顯示當天的活動。</p><div class="card-box" id="cal"></div></section>
   <div class="section-head"><div><h2 id="lt"></h2><p>選擇活動卡片可查看完整資訊與主辦方連結。</p></div></div>
-  <div class="r event-list-actions"><div class="r"><button data-a="e.sort" data-v="soon">即將到來</button><button data-a="e.sort" data-v="new">最新活動</button></div><button id="event-show-all" data-a="e.all" aria-controls="el">查看全部活動</button></div><div id="el"></div>
-  <section class="calendar-panel" aria-labelledby="event-calendar-title"><h3 id="event-calendar-title">活動日曆</h3><p class="mu" style="margin:0 0 10px">點選有活動的日期，上方會顯示當天的活動。</p><div class="card-box" id="cal"></div></section>`;
+  <div class="r event-list-actions"><div class="r"><button data-a="e.sort" data-v="soon">即將到來</button><button data-a="e.sort" data-v="new">最新活動</button></div><button id="event-show-all" data-a="e.all" aria-controls="el">查看全部活動</button></div><div id="el"></div>`;
   document.querySelectorAll("[data-event-picker]").forEach(el=>{el.onchange=()=>act.pick(el)});
   $("#event-browse-date").onchange=event=>{
     const picker=event.currentTarget;
