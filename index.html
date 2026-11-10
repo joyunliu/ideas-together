@@ -65,7 +65,10 @@ input[type=date],input[type=time]{-webkit-appearance:none;appearance:none}
 .event-links{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-top:8px}
 .event-links a{font-size:13px}
 body .ev.event-card{align-items:flex-start}
-.event-card .event-title{font-weight:800}
+.event-card .event-title{display:block;font-weight:800;margin:4px 0 4px 4px}
+.event-card .event-card-meta{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px 10px;margin-top:10px}
+body .event-card button.event-card-favorite{min-height:44px;padding:6px 12px}
+body .event-card button.event-card-favorite[aria-pressed=true]{background:#465534;border-color:#465534;color:#fff}
 .home-mini-grid .event-card{display:flex;flex-direction:column}
 .home-mini-grid .event-cover{position:relative;color:var(--ac-dark)}
 .event-cover .card-thumb{position:absolute;inset:0}
@@ -162,9 +165,11 @@ body .category-shortcuts a{color:#465534}
 .category-shortcuts [aria-current=page]{border-color:#465534;text-decoration:underline}
 .discovery-results{margin:10px 0}
 .discovery-results .filter-actions{margin:0}
+#event-list > .filter-actions{display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px;margin-bottom:12px}
+#active-event-filters:not(:empty){margin-bottom:12px}
 .discovery-results .filter-chips:empty{display:none}
 body .discovery-results .filter-chips .event-filter-chip,body .filter-panel .filter-row button.on,body .event-quick-dates button.on,body .event-list-actions button.on{background:#465534;color:#fff;border-color:#465534}
-.event-card .event-date-label{align-self:flex-start;margin:0 0 5px}
+body .event-card .event-date-label{align-self:flex-start;margin:0 0 5px}
 .home-mini-grid:has(.event-card){align-items:start}
 body .event-card .event-links a.b,body .resource-grid a.p,body .detail-official{background:#465534;border-color:#465534;color:#fff;text-decoration:none}
 .event-card .event-links a.b,.resource-grid a.p{padding:7px 10px}
@@ -965,6 +970,7 @@ async function attendanceList(uid){
       <div class="r">${link?`<a class="b" href="${esc(e.link)}" target="_blank" rel="noopener noreferrer nofollow ugc">${link.label} ↗</a>`:""}${attendanceRemove(row.event_id,row.slot_key)}</div></div>`;
   }).join("")+"</fieldset>";
 }
+const pendingEventReactions=new Set();
 const cntE=(a,id)=>a.filter(x=>x.event_id===id).length,hasE=(a,id)=>S.u&&a.some(x=>x.event_id===id&&x.user_id===S.u.id);
 const act={
   menu(el){const mn=$("#menu");if(!mn)return;const o=mn.classList.toggle("s");el.setAttribute("aria-expanded",o)},
@@ -985,14 +991,33 @@ const act={
   async setpw(){const p=$("#np").value;if(p.length<6)return $("#ae2").textContent="密碼至少 6 字。";
     const{error}=await sb.auth.updateUser({password:p});if(error)return $("#ae2").textContent="更新失敗："+zh(error);shut();alert("密碼已更新。");location.hash="#/"},
   async out(){await sb.auth.signOut();location.hash="#/"},
-  async toggle(el){if(!need())return;const t=el.dataset.t,id=el.dataset.id,arr=t==="event_likes"?S.elikes:S.efavs,on=hasE(arr,id);
-    const{error}=await(on?sb.from(t).delete().match({event_id:id,user_id:S.u.id}):sb.from(t).insert({event_id:id,user_id:S.u.id}));if(error)return alert(zh(error));await load();
-    const dialog=$("#event-quick");
-    if(dialog.open&&dialog.dataset.id===id){
-      const post=S.ev.find(e=>e.id===id);
-      if(post){renderQuick(post);dialog.querySelector(`[data-t="${t}"]`)?.focus()}
-      if($("#el"))draw();
-    }else route();
+  async toggle(el){
+    if(!need())return;
+    const {t,id}=el.dataset,uid=S.u.id,hash=location.hash;
+    const arr=t==="event_likes"?S.elikes:S.efavs,on=hasE(arr,id);
+    const row={event_id:id,user_id:uid},pendingKey=t+":"+uid+":"+id;
+    if(pendingEventReactions.has(pendingKey))return;
+    pendingEventReactions.add(pendingKey);
+    el.disabled=true;
+    try{
+      const {error}=await(on?sb.from(t).delete().match(row):sb.from(t).insert(row));
+      if(error)return alert(zh(error));
+      if(S.u?.id!==uid)return;
+      const key=t==="event_likes"?"elikes":"efavs";
+      S[key]=S[key].filter(item=>item.event_id!==id||item.user_id!==uid);
+      if(!on)S[key].push(row);
+      if(location.hash!==hash)return;
+      const dialog=$("#event-quick");
+      if(dialog.open&&dialog.dataset.id===id){
+        const post=S.ev.find(e=>e.id===id);
+        if(post){renderQuick(post);dialog.querySelector(`[data-t="${t}"]`)?.focus()}
+        if($("#el"))draw();
+      }else if(el.classList.contains("event-card-favorite")){
+        if($("#el"))draw();
+        else await route();
+        ($(`.event-card-favorite[data-id="${CSS.escape(id)}"]`)||$("#event-list"))?.focus({preventScroll:true});
+      }else await route();
+    }finally{pendingEventReactions.delete(pendingKey);el.disabled=false}
   },
   attend:el=>saveAttendance(el),
   unattend:el=>saveAttendance(el,true),
@@ -1048,13 +1073,6 @@ const act={
   },
   sort(el){S.sort=el.dataset.v;draw()},
   view(el){S.view=el.dataset.v;draw()},
-  jump(){
-    S.view="list";
-    draw();
-    const list=$("#event-cards");
-    list.focus({preventScroll:true});
-    list.scrollIntoView({block:"start"});
-  },
   all(){
     S.showAll=!S.showAll;
     draw();
@@ -1065,7 +1083,17 @@ const act={
     }
   },
   clr(){["city","age","fee","when","org","aud","tod","booking","sessionType"].forEach(k=>S[k].clear());S.q="";S.day=null;S.favOnly=false;home()},
-  day(el){const k=el.dataset.k;S.day=!k||S.day===k?null:k;if(S.day)act.jump();else draw()},
+  day(el){
+    const k=el.dataset.k;
+    S.day=!k||S.day===k?null:k;
+    if(S.day)S.view="list";
+    draw();
+    if(S.day){
+      const list=$("#event-cards");
+      list.focus({preventScroll:true});
+      list.scrollIntoView({block:"start"});
+    }
+  },
   adddate(){const v=$("#event-fdl").value;if(!v)return;if(FD.length>=20)return alert("最多可加入 20 個日期。");if(!FD.includes(v))FD.push(v);FD.sort();$("#event-fdl").value="";drawChips();saveActiveDraft()},
   rmdate(el){FD=FD.filter(x=>x!==el.dataset.d);drawChips();saveActiveDraft()},
   addsch(){const v=$("#event-fsl").value;if(!v)return;syncSch();if(FS.length>=MAX_SESSIONS)return alert("最多可加入 "+MAX_SESSIONS+" 個場次。");FS.push({d:v,s:"",e:""});FS.sort((a,b)=>a.d.localeCompare(b.d));$("#event-fsl").value="";drawSch();saveActiveDraft()},
@@ -1177,7 +1205,7 @@ function ecard(e,slots=upcomingSlots(e),home=false){
       ${groups.length>1?`<div class="mu">另有 ${groups.length-1} 天 · ${slots.length} 場可查看</div>`:""}
     </div>`:"";
   const venue=[e.city+(e.district||""),e.venue].filter(Boolean).join(" · ");
-  const link=eventRegistration(e,first);
+  const link=eventRegistration(e,first),saved=Boolean(hasE(S.efavs,e.id));
   const dateBadge=`<div class="dt"><b>${md(date)}</b><span>週${WK[date.getDay()]}</span></div>`;
   const kind=coverKind(e);
   const cover=e.photo?`<div class="${home?"ph ":""}event-cover is-${kind}">
@@ -1188,9 +1216,10 @@ function ecard(e,slots=upcomingSlots(e),home=false){
     <div class="${home?"cb":"eb"}">${!e.photo?`<span class="t event-date-label">${esc(md(date)+"（週"+WK[date.getDay()]+ "）")}</span>`:""}<a class="event-title" href="${path}">${esc(e.title)}</a>
     <div class="event-summary"><span class="t">${sessionLabel(e)}</span><span class="t ag">${esc(ageTxt(e))}</span><span class="t ${e.fee?"":"ok"}">${feeTxt(e)}</span>${firstDay.length>1?bookingBadge(e):bookingBadge(e,first)}</div>
     ${times}${e.recurrence_note?`<div class="mu">${esc(e.recurrence_note)}</div>`:""}<div class="mu event-place">${esc(venue)}</div>
-    <div class="mu">主辦 ${esc(e.shared_organizer||nick(e))} ${orgTag(e)}</div>
     <div class="event-links"><a class="b" href="${path}">${slots.length>1&&!e.flex_time&&!e.continuous?"查看場次":"查看活動"}</a>
-      ${link?`<a href="${esc(e.link)}" target="_blank" rel="noopener noreferrer nofollow ugc">${link.label} ↗</a>`:""}</div>${link?.hint?`<div class="mu">${esc(link.hint)}</div>`:""}</div></article>`;
+      ${link?`<a href="${esc(e.link)}" target="_blank" rel="noopener noreferrer nofollow ugc">${link.label} ↗</a>`:""}</div>${link?.hint?`<div class="mu">${esc(link.hint)}</div>`:""}
+    <div class="event-card-meta"><span class="mu">瀏覽 <span data-event-views="${e.id}">${Number(e.view_count||0)}</span> 次</span>
+    <button class="event-card-favorite" data-a="e.toggle" data-t="event_favs" data-id="${e.id}" aria-label="收藏 ${esc(e.title)}" aria-pressed="${saved}">${saved?"★ 已收藏":"☆ 收藏"}</button></div></div></article>`;
 }
 function home(){
   const grp=(k,arr)=>arr.map(([v,t])=>`<button data-a="e.ft" data-k="${k}" data-v="${v}" aria-pressed="${S[k].has(String(v))}" class="${S[k].has(String(v))?"on":""}">${t}</button>`).join("");
@@ -1209,7 +1238,7 @@ function home(){
   <div class="filter-label">活動來源</div><div class="filter-row">${grp("org",[["personal","個人主辦"],["organization","商家／機構主辦"],["shared","轉貼他人活動"]])}</div></div>
   </div>
   <div class="r event-list-actions event-view-controls"><div class="r" role="group" aria-label="顯示方式"><button data-a="e.view" data-v="list" aria-controls="event-list">列表</button><button data-a="e.view" data-v="calendar" aria-controls="event-calendar">月曆</button></div><div class="r" id="event-sort" role="group" aria-label="活動排序"><button data-a="e.sort" data-v="soon">即將到來</button><button data-a="e.sort" data-v="new">最新活動</button></div></div>
-  <section class="discovery-results" id="event-list" tabindex="-1" aria-label="活動列表"><div class="filter-actions"><span class="filter-count" id="fcount" aria-live="polite"></span><button data-a="e.jump">跳到活動列表</button><button data-a="e.clr">清除所有篩選</button></div><div class="filter-chips" id="active-event-filters"></div>
+  <section class="discovery-results" id="event-list" tabindex="-1" aria-label="活動列表"><div class="filter-actions"><span class="filter-count" id="fcount" aria-live="polite"></span><button data-a="e.clr">清除所有篩選</button></div><div class="filter-chips" id="active-event-filters"></div>
   <section class="calendar-panel" id="event-calendar" aria-labelledby="event-calendar-title"><h3 id="event-calendar-title">活動月曆</h3><p class="mu" style="margin:0 0 10px">點選有活動的日期可查看當天的列表。</p><div class="card-box" id="cal"></div></section>
   <div id="event-cards" tabindex="-1"><div id="el"></div><div class="r event-list-actions"><button id="event-show-all" data-a="e.all" aria-controls="el"></button></div></div></section>`;
   document.querySelectorAll("[data-event-picker]").forEach(el=>{el.onchange=()=>act.pick(el)});
@@ -1269,13 +1298,17 @@ function draw(){
     <p>${active.length||S.day?"試著調整日期、地點或關鍵字。":"歡迎分享即將舉辦的親子活動。"}</p>
     ${active.length||S.day?'<button data-a="e.clr">清除所有篩選</button>':'<button class="p" data-a="e.new">＋ 分享活動</button>'}</div>`);
 }
+async function updateEventViews(e){
+  const count=await trackView("event",e.id,e);
+  const current=S.ev.find(item=>item.id===e.id);
+  if(current)current.view_count=Math.max(Number(current.view_count||0),count);
+  for(const node of document.querySelectorAll(`[data-event-views="${CSS.escape(e.id)}"]`))node.textContent=current?.view_count??count;
+}
 async function detail(id,params){
   const e=S.ev.find(x=>x.id===id);
   if(!e){$("#app").innerHTML='<p><a data-go="#/events">← 返回</a></p><p>找不到這個活動，可能已結束、還在審核中或已被刪除。</p>';return}
   $("#app").innerHTML=detailHTML(e,false,params?.get("day"),params?.get("slot"));
-  const [views]=await Promise.all([trackView("event",id,e),loadAttendance(e,$("#app [data-attendance]"))]);
-  const target=$("#app [data-event-views]");
-  if(target?.dataset.eventViews===id)target.textContent=views;
+  await Promise.all([updateEventViews(e),loadAttendance(e,$("#app [data-attendance]"))]);
 }
 function closeQuick(){
   const dialog=$("#event-quick");
@@ -1296,9 +1329,7 @@ async function openQuick(id,day="",slot=""){
   dialog.dataset.slot=slot;
   const attendance=renderQuick(e);
   if(!dialog.open)dialog.showModal();
-  const [views]=await Promise.all([trackView("event",id,e),attendance]);
-  const target=dialog.querySelector("[data-event-views]");
-  if(dialog.open&&target?.dataset.eventViews===id)target.textContent=views;
+  await Promise.all([updateEventViews(e),attendance]);
 }
 function detailHTML(e,quick=false,selectedDay,selectedSlot){
   const id=e.id,category=listingType(e);
