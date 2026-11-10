@@ -1587,6 +1587,30 @@ function cultureURL(value){
     return ["http:","https:"].includes(url.protocol)&&!url.username&&!url.password?url.href:"";
   }catch(e){return ""}
 }
+function cultureDescription(value){
+  const text=cultureText(value);
+  if(!/<[a-z!/]|&(?:#\d+|#x[\da-f]+|[a-z]+);/i.test(text))return text;
+  const template=document.createElement("template");
+  template.innerHTML=text.replace(/<br\b[^>]*>|<\/(?:p|div|li|tr|h[1-6])\s*>/gi,"\n");
+  template.content.querySelectorAll("script,style,template").forEach(node=>node.remove());
+  return template.content.textContent.trim();
+}
+function cultureSchedule(slots,now){
+  const clock=/^(\d{4}-\d{2}-\d{2})[ T]((?:[01]\d|2[0-3]):[0-5]\d)(?::[0-5]\d)?$/;
+  const seen=new Set();
+  return slots.flatMap(slot=>{
+    const start=cultureText(slot.time).replaceAll("/","-").match(clock);
+    const end=cultureText(slot.endTime).replaceAll("/","-").match(clock);
+    if(!start||start[2]==="00:00")return [];
+    const startsAt=eventTime(start[1],start[2]);
+    if(!Number.isFinite(+startsAt)||startsAt<=now)return [];
+    if(end&&end[1]!==start[1])return [];
+    const [,d,s]=start,key=d+" "+s;
+    if(seen.has(key))return [];
+    seen.add(key);
+    return [{d,s,e:end&&end[2]!=="23:59"&&end[2]>s?end[2]:""}];
+  }).sort((a,b)=>a.d.localeCompare(b.d)||a.s.localeCompare(b.s)).slice(0,MAX_SESSIONS);
+}
 function cultureCandidates(items,now){
   const today=ymd(taipeiDate(now)),until=ymd(taipeiDate(+now+30*864e5)),seen=new Set();
   const date=value=>cultureText(value).replaceAll("/","-");
@@ -1599,7 +1623,7 @@ function cultureCandidates(items,now){
     if(!link)return [];
     seen.add(uid);
     const slots=Array.isArray(row.showInfo)?row.showInfo.filter(x=>x&&typeof x==="object"):[];
-    const future=slots.filter(x=>date(x.time).slice(0,10)>=today);
+    const future=slots.filter(x=>date(x.time).slice(0,10)>=today).sort((a,b)=>date(a.time).localeCompare(date(b.time)));
     const slot=future[0]||slots[0]||{};
     const address=cultureText(slot.location),venue=cultureText(slot.locationName);
     const normalized=searchText(address);
@@ -1607,17 +1631,34 @@ function cultureCandidates(items,now){
     const area=city=>DIST[city].find(d=>normalized.replace(/^\d*\s*/,"").replace(city,"").trimStart().startsWith(searchText(d)));
     const guesses=matchesCity.length?matchesCity:CITIES.filter(area);
     const city=guesses.length===1?guesses[0]:"";
-    const organizer=Array.isArray(row.masterUnit)?row.masterUnit.map(cultureText).filter(Boolean).join("、"):"";
-    const start=date(slot.time),end=date(slot.endTime);
-    const time=/^(?:[01]\d|2[0-3]):[0-5]\d$/;
-    const startTime=start.slice(11,16),endTime=end.slice(11,16);
-    const single=slots.length===1&&first===last&&start.slice(0,10)===first;
-    const exactTime=single&&time.test(startTime)&&startTime!=="00:00"&&eventTime(first,startTime)>now;
+    const description=cultureDescription(row.descriptionFilterHtml);
+    const lines=description.split(/\r?\n/).map(cultureText).filter(Boolean);
+    const explicitOrganizer=lines.map(line=>line.match(/^主辦(?:單位|方)?\s*[：:]\s*(.{1,100})$/)?.[1]).find(Boolean);
+    const units=(Array.isArray(row.masterUnit)?row.masterUnit:[row.masterUnit]).map(cultureText).filter(Boolean);
+    const organizer=units.join("、")||explicitOrganizer||"";
+    const audienceLine=lines.find(line=>line.length<=160&&/^(?:適合年齡|(?:活動|參加|參與|適合|招生)?對象)\s*[：:｜]/.test(line));
+    const evidence=[audienceLine,title].find(line=>line&&FAMILY_AUDIENCE.test(line))||"";
+    const audience=/限家長|僅限家長|家長專場/.test(evidence)?"parents":/親子|家長陪同|成人陪同/.test(evidence)?"family":"";
+    const ageDetail=audienceLine&&/\d\s*(?:足?歲|個?月齡)|國小|幼兒園/.test(audienceLine.normalize("NFKC"))
+      ?audienceLine.replace(/^[^：:｜]+[：:｜]\s*/,"").slice(0,40):"";
+    const sameVenue=future.filter(row=>cultureText(row.location)===address&&cultureText(row.locationName)===venue);
+    const schedule=cultureSchedule(sameVenue,now);
+    const prices=new Set(sameVenue.map(row=>cultureText(row.price)));
+    const price=prices.size>1?"":cultureText(slot.price);
+    const fee=price.normalize("NFKC").match(/^(?:NT\$\s*|新台幣\s*)?(\d{1,3}(?:,\d{3})+|\d{1,6})\s*元?$/i)?.[1];
+    const sourceNote="\n\n資料來源：文化部親子活動開放資料。";
+    const details={schedule,age_detail:ageDetail,audience,booking_status:"check",
+      description:description?`${description.slice(0,800-sourceNote.length).trimEnd()}${sourceNote}`:"",
+      ...(fee&&Number(fee.replaceAll(",",""))<=100000?{fee:Number(fee.replaceAll(",",""))}:{}),
+      ...(price&&!fee?{fee_note:price.replace(/\s+/g," ").slice(0,60)}:{})};
+    const online=/線上(?:展|活動|觀看|欣賞)/.test(title);
+    const missing=[!organizer&&"主辦方",!description&&"活動說明",!evidence&&"親子對象",
+      !ageDetail&&audience!=="parents"&&"適齡",(!schedule.length||schedule.some(row=>!row.e)||sameVenue.length!==future.length)&&"場次",
+      (!online&&(!city||!venue||!area(city)))&&"地點",(!price||(!fee&&!/^(免費|免費入場|免費參加)[。！!]?$/.test(price)))&&"費用"].filter(Boolean);
     return [{
       uid,title,first,last,link,sales,organizer,address,venue,city,district:city?area(city):"",
-      price:cultureText(slot.price),startTime:exactTime?startTime:"",
-      endTime:exactTime&&end.slice(0,10)===first&&time.test(endTime)&&endTime>startTime&&endTime!=="23:59"?endTime:"",
-      single,online:/線上(?:展|活動|觀看|欣賞)/.test(title)
+      price,single:first===last,online,evidence,details,missing,
+      note:missing.length?`文化部資料仍待核對：${missing.join("、")}。`:""
     }];
   }).sort((a,b)=>a.first.localeCompare(b.first));
 }
@@ -1626,7 +1667,7 @@ function externalDraft(item,createdAt){
   const add=(id,value,type="text")=>fields.push({id:"event-"+id,value,type});
   const details=item.details||{};
   const slots=Array.isArray(details.schedule)?details.schedule.filter(slot=>slot&&
-    /^\d{4}-\d{2}-\d{2}$/.test(slot.d)&&/^\d{2}:\d{2}$/.test(slot.s)&&/^\d{2}:\d{2}$/.test(slot.e)&&
+    /^\d{4}-\d{2}-\d{2}$/.test(slot.d)&&/^\d{2}:\d{2}$/.test(slot.s)&&(!slot.e||/^\d{2}:\d{2}$/.test(slot.e))&&
     eventTime(slot.d,slot.s)>new Date()):[];
   add("ft",[...item.title].slice(0,EVENT_TITLE_LIMIT).join(""));
   add("source","shared","select-one");
@@ -1652,19 +1693,46 @@ function externalDraft(item,createdAt){
   }else if(item.single){
     fields.push({name:"event-fk",value:"single",type:"radio",checked:true});
     add("fd1",item.first,"date");
-    if(item.startTime){add("fs1h",item.startTime.slice(0,2),"select-one");add("fs1m",item.startTime.slice(3))}
-    if(item.endTime){add("fe1h",item.endTime.slice(0,2),"select-one");add("fe1m",item.endTime.slice(3))}
   }
   const dates=item.first===item.last?item.first:`${item.first} ～ ${item.last}（場次請查官方頁）`;
   return {id:item.web?"web-"+encodeURIComponent(item.link):"moc-"+item.uid,type:"event",postId:null,createdAt,fields,FS:slots,step:0,
     culture:{uid:item.uid,title:item.title||"網路活動",dates,price:item.price,link:item.link,sales:details.registration_url||item.sales,
       web:item.web,evidence:item.evidence,note:item.note}};
 }
+function fillCultureDraft(saved,fresh){
+  const fields=[...saved.fields];
+  const current=id=>fields.find(field=>field.id===id)?.value;
+  const kind=fields.find(field=>field.name==="event-fk"&&field.checked)?.value;
+  const hasTiming=kind||saved.FS?.length||saved.FD?.length;
+  const incoming=[...fresh.fields];
+  const [slot]=fresh.FS;
+  if(kind==="single"&&fresh.FS.length===1&&slot.d===current("event-fd1")){
+    for(const [id,time] of [["fs1",slot.s],["fe1",slot.e]]){
+      if(!time||current("event-"+id+"h")||current("event-"+id+"m"))continue;
+      incoming.push({id:"event-"+id+"h",type:"select-one",value:time.slice(0,2)},
+        {id:"event-"+id+"m",type:"text",value:time.slice(3)});
+    }
+  }
+  for(const field of incoming){
+    if(field.name==="event-fk"){
+      if(!hasTiming)fields.push(field);
+      continue;
+    }
+    if(!field.value)continue;
+    if(field.id==="event-age-detail"&&current("event-age-preset"))continue;
+    const index=fields.findIndex(old=>old.id===field.id);
+    if(index<0)fields.push(field);
+    else if(!fields[index].value?.trim()||(field.id==="event-fh"&&fields[index].value===culturePlaceholder(saved.culture.title)))fields[index]=field;
+  }
+  return {...saved,fields,FS:hasTiming?saved.FS:fresh.FS,
+    culture:{...saved.culture,note:fresh.culture.note,evidence:saved.culture.evidence||fresh.culture.evidence}};
+}
 function openImportDraft(item){
   const draft=externalDraft(item,new Date().toISOString());
   const saved=readDrafts("event").find(row=>row.id===draft.id);
-  form(null,saved||draft);
-  if(!saved)saveActiveDraft(true);
+  const updated=saved?.culture&&!item.web?fillCultureDraft(saved,draft):saved||draft;
+  form(null,updated);
+  if(!saved||JSON.stringify(updated)!==JSON.stringify(saved))saveActiveDraft(true);
 }
 function openWebDraft(link,row){
   const first=row?.first_day||"",last=row?.last_day||"";
@@ -1687,7 +1755,7 @@ async function importCulture(refresh=false){
       .not("source_key","is",null).in("events.status",["pending","approved"]);
     const [cached,existing]=await Promise.all([snapshot,submitted]);
     let rows=cached?.items,fetchedAt=cached?.fetched_at,liveError=false;
-    if(refresh||!Array.isArray(rows)){
+    if(refresh||!Array.isArray(rows)||!cached?.includes_description){
       try{
         const response=await fetch(CULTURE_FEED,{cache:"no-store",signal:AbortSignal.timeout(15000)});
         if(!response.ok)throw new Error("feed");
@@ -1709,6 +1777,7 @@ async function importCulture(refresh=false){
     choices.innerHTML='<button id="culture-reload">即時更新來源</button>'+items.map((item,i)=>`<article class="cm">
       <b>${esc(item.title)}</b>
       <p class="mu">${esc(item.first)}${item.last===item.first?"":" ～ "+esc(item.last)} · ${esc([item.city,item.venue].filter(Boolean).join(" ")||"地點待確認")}</p>
+      ${item.missing.length?`<p class="mu">待核對：${esc(item.missing.join("、"))}</p>`:""}
       <div class="r"><a href="${esc(item.link)}" target="_blank" rel="noopener noreferrer">查看來源 ↗</a>
       ${posted(item)?'<span class="mu">已送審或發布</span>':`<button class="p" data-culture-index="${i}">${drafts.has("moc-"+item.uid)?"繼續核對":"核對並匯入"}</button>`}</div></article>`).join("");
     $("#culture-reload").onclick=()=>importCulture(true);

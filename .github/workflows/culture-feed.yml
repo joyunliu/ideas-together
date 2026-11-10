@@ -37,9 +37,9 @@ jobs:
               isinstance(row, dict) and row.get("UID") and row.get("startDate") for row in source
           )):
               raise SystemExit("Culture feed returned an invalid format")
-          fields = ("UID", "title", "startDate", "endDate", "webSales", "sourceWebPromote", "showInfo", "masterUnit")
+          fields = ("UID", "title", "startDate", "endDate", "webSales", "sourceWebPromote", "showInfo", "masterUnit", "descriptionFilterHtml")
           items = [{key: row[key] for key in fields if key in row} for row in source if isinstance(row, dict)]
-          snapshot = {"fetched_at": datetime.now(timezone.utc).isoformat(), "items": items}
+          snapshot = {"fetched_at": datetime.now(timezone.utc).isoformat(), "includes_description": True, "items": items}
           (temp / "culture-feed.json").write_text(json.dumps(snapshot, ensure_ascii=False), encoding="utf-8")
           print(f"Fetched {len(items)} source records")
           PY
