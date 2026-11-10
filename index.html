@@ -41,11 +41,11 @@ input[type=date],input[type=time]{-webkit-appearance:none;appearance:none}
 #mb .game-tags label{display:inline-flex;align-items:center;gap:6px;margin:0;line-height:1.35;min-height:32px}
 #mb .game-tags input{width:16px;height:16px;flex:none;margin:0;accent-color:var(--ac-dark)}
 .draft-title{overflow-wrap:anywhere}
-.home-feed{margin:26px 0}.home-feed-head{display:flex;align-items:end;justify-content:space-between;gap:12px;margin:0 0 10px}.home-feed-head h3{margin:0;font-size:21px}.home-feed-head a{font-size:13px;font-weight:700}.home-mini-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.home-mini-grid .c{min-width:0}.home-mini-grid .ev{margin:0;height:100%}.home-welcome{padding:22px 24px;background:var(--card);border:1px solid var(--bd);border-radius:20px;margin:18px 0}.home-welcome p{margin:4px 0;color:var(--mu);font-size:14px}.home-feed-empty{padding:16px;border:1px dashed var(--bd);border-radius:14px;color:var(--mu);font-size:14px}
+.home-feed{margin:26px 0}.home-feed-head{display:flex;align-items:end;justify-content:space-between;gap:12px;margin:0 0 10px}.home-feed-head h3{margin:0;font-size:21px}.home-feed-head a{font-size:13px;font-weight:700}.home-mini-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.home-mini-grid .c{min-width:0}.home-welcome{padding:22px 24px;background:var(--card);border:1px solid var(--bd);border-radius:20px;margin:18px 0}.home-welcome p{margin:4px 0;color:var(--mu);font-size:14px}.home-feed-empty{padding:16px;border:1px dashed var(--bd);border-radius:14px;color:var(--mu);font-size:14px}
 .view-meta{font-size:12px;color:var(--mu);margin-top:5px}.notice-banner{background:var(--ac2);border:1px solid var(--bd);color:var(--ac-dark);border-radius:14px;padding:13px 16px;margin:0 0 16px;font-size:14px}
 .filter-chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}.filter-chips span{background:var(--tg);border-radius:999px;padding:4px 10px;font-size:12px;color:var(--mu)}
-@media(max-width:760px){.home-mini-grid{grid-template-columns:1fr 1fr}.home-mini-grid .c:last-child:nth-child(odd){display:none}.home-feed-head h3{font-size:19px}.toast{bottom:calc(16px + env(safe-area-inset-bottom))}.mb{padding:17px}}
-@media(max-width:430px){.home-mini-grid{grid-template-columns:1fr}.home-mini-grid .c:last-child:nth-child(odd){display:block}.home-feed-head{align-items:center}}
+@media(max-width:760px){.home-mini-grid{grid-template-columns:1fr 1fr}.home-mini-grid .c:not(.event-card):last-child:nth-child(odd){display:none}.home-feed-head h3{font-size:19px}.toast{bottom:calc(16px + env(safe-area-inset-bottom))}.mb{padding:17px}}
+@media(max-width:430px){.home-mini-grid{grid-template-columns:1fr}.home-mini-grid .c:not(.event-card):last-child:nth-child(odd){display:block}.home-feed-head{align-items:center}}
 .browse-filters>summary,.posting-rules>summary{cursor:pointer;font-weight:700;color:var(--ac-dark)}
 .filter-panel .browse-filters{margin-top:12px}
 .filter-panel .browse-filters>summary{padding:6px 0}
@@ -66,6 +66,15 @@ input[type=date],input[type=time]{-webkit-appearance:none;appearance:none}
 .event-links a{font-size:13px}
 body .ev.event-card{align-items:flex-start}
 .event-card .event-title{font-weight:800}
+.home-mini-grid .event-card{display:flex;flex-direction:column}
+.home-mini-grid .event-cover{position:relative;color:var(--ac-dark)}
+.event-cover .card-thumb{position:absolute;inset:0}
+.event-cover .dt{position:absolute;top:12px;left:12px;display:grid;min-width:54px;padding:5px 9px;text-align:center;line-height:1.25;background:var(--card);color:var(--tx);border-radius:12px;box-shadow:var(--shadow)}
+.event-cover .dt b{font-size:17px}
+.event-cover .dt span{font-size:12px;color:var(--mu)}
+.home-mini-grid .event-card .cb{display:flex;flex:1;flex-direction:column}
+.home-mini-grid .event-title{font-size:17px;line-height:1.45}
+.home-mini-grid .event-links{margin-top:auto;padding-top:8px}
 .card-thumb{width:100%;height:100%;object-fit:cover}
 @media(max-width:760px){
   .filter-panel .filter-row button{min-height:38px}
@@ -740,7 +749,7 @@ function cal(base){
   for(let d=1;d<=n;d++){const k=ymd(new Date(y,m,d)),c=cnt[k]||0;h+=`<button class="day${c?" has":""}${S.day===k?" sel":""}${k===today?" today":""}" ${c?`data-a="e.day" data-k="${k}"`:"disabled"}>${d}${c?`<i>${c} 個</i>`:""}</button>`}
   return h+"</div>";
 }
-function ecard(e,slots=upcomingSlots(e)){
+function ecard(e,slots=upcomingSlots(e),home=false){
   const first=slots[0],date=first?dateOf(first.d):taipeiDate(e.start_at);
   const path="#/events/e/"+e.id;
   const times=e.flex_time?'<span class="t ok">可預約</span>':
@@ -748,8 +757,15 @@ function ecard(e,slots=upcomingSlots(e)){
     `<ul class="event-times">${slots.slice(0,2).map(slot=>`<li>${esc(slotText(slot))}</li>`).join("")}
       ${slots.length>2?`<li>另有 ${slots.length-2} 場，詳見活動頁</li>`:""}</ul>`;
   const venue=[e.city+(e.district||""),e.venue].filter(Boolean).join(" · ");
-  return `<article class="ev event-card" data-go="${path}"><div class="dt"><b>${md(date)}</b><span>週${WK[date.getDay()]}</span></div>
-    <div class="eb"><a class="event-title" href="${path}">${esc(e.title)}</a><div class="mu">主辦：${esc(e.shared_organizer||nick(e))}</div>
+  const dateBadge=`<div class="dt"><b>${md(date)}</b><span>週${WK[date.getDay()]}</span></div>`;
+  const cover=home?`<div class="ph event-cover">
+    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true">
+      <rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 10h18m-13 5h2m4 0h2"/>
+    </svg>
+    ${e.photo?`<img class="card-thumb" loading="lazy" decoding="async" width="500" height="300" src="${esc(pub(e.photo))}" alt="" onerror="this.hidden=true">`:""}
+    ${dateBadge}</div>`:dateBadge;
+  return `<article class="${home?"c":"ev"} event-card" data-go="${path}">${cover}
+    <div class="${home?"cb":"eb"}"><a class="event-title" href="${path}">${esc(e.title)}</a><div class="mu">主辦：${esc(e.shared_organizer||nick(e))}</div>
     ${times}<div class="mu event-place">${esc(venue)}</div>
     <div><span class="t ag">${ageTxt(e)}</span><span class="t">${AUD[e.audience]||"親子"}</span><span class="t ${e.fee?"":"ok"}">${feeTxt(e)}</span>${orgTag(e)}</div>
     <div class="mu">♥ ${cntE(S.elikes,e.id)} · ★ ${cntE(S.efavs,e.id)} · 瀏覽 ${Number(e.view_count||0)}</div>
@@ -1034,7 +1050,7 @@ async function homePage(){
   const recent=G.S.games.filter(g=>g.status==="approved").sort((a,b)=>new Date(b.created_at)-new Date(a.created_at)).slice(0,3);
   const eventList=E.S.ev.filter(e=>e.status==="approved"&&E.upcomingSlots(e).length).sort((a,b)=>E.nextEventDate(a)-E.nextEventDate(b)).slice(0,3);
   const gameHtml=recent.length?`<div class="home-mini-grid">${recent.map(g=>G.card({g,miss:0})).join("")}</div>`:'<div class="home-feed-empty">目前還沒有遊戲分享，歡迎成為第一位分享者。</div>';
-  const eventHtml=eventList.length?`<div class="home-mini-grid">${eventList.map(e=>E.ecard(e)).join("")}</div>`:'<div class="home-feed-empty">目前沒有即將舉辦的活動。</div>';
+  const eventHtml=eventList.length?`<div class="home-mini-grid">${eventList.map(e=>E.ecard(e,E.upcomingSlots(e),true)).join("")}</div>`:'<div class="home-feed-empty">目前沒有即將舉辦的活動。</div>';
   const notice=(()=>{try{return sessionStorage.getItem("ideas_submission_notice")}catch(e){return null}})();
   if(notice){try{sessionStorage.removeItem("ideas_submission_notice")}catch(e){}}
   $("#app").innerHTML=`${notice?`<div class="notice-banner">✓ ${esc(notice)} 你可以在「我的投稿」查看審核狀態。</div>`:""}<div class="intro"><h2>今天想找什麼？</h2><p>找靈感、找活動，也把生活中的好點子分享出去。</p></div>
