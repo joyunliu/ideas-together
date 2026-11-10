@@ -1028,7 +1028,7 @@ const act={
     if(e)return loadAttendance(e,panel);
   },
   favonly(el){S.favOnly=!S.favOnly;el.classList.toggle("on",S.favOnly);el.setAttribute("aria-pressed",S.favOnly);draw()},
-  new:trigger=>need("event",trigger)&&form(),
+  new:trigger=>need("event",trigger)&&newEventOptions(),
   repeat(el){
     if(!need())return;
     const post=S.ev.find(e=>e.id===el.dataset.id&&e.author_id===S.u.id&&!e.shared_organizer);
@@ -1421,6 +1421,7 @@ function form(e,draft,template,append=false){
   modal(`<div data-draft-form="event"><h3 style="margin-top:0">${append?"在本活動新增場次":editing?"編輯活動":template?"複製為新場次":"分享一個活動"}</h3>
   <details class="rule posting-rules"><summary>活動投稿規則</summary><ul><li>僅分享活動資訊：不接受折扣促銷、團購、業配、抽獎集客等文字</li><li>請填寫活動日期、時間、參加方式、適合年齡與費用（含材料費）</li><li>轉貼他人活動請使用公開的官方公告或報名連結，並標明主辦方</li><li>${org?"實體活動請填寫公開的活動地址":"個人帳號請使用公開場地，勿填寫住家地址"}</li><li>活動說明 800 字內，照片 1 張（8 MB 內，會自動壓縮），請遵守隱私及著作權</li><li>活動結束後會自動從日曆隱藏；送出後需經審核才會公開，編輯後也會重新審核</li></ul></details>
   ${imported?`<div class="draft-note"><b>${imported.web?"網路活動草稿":"文化部資料草稿"}</b><br>${esc(imported.title)}<br>${esc(imported.dates)}${imported.price?`<br>來源費用：${esc(imported.price)}`:""}${imported.note?`<br>${esc(imported.note)}`:""}<br>請核對主辦方公告的場次、適合年齡和報名狀態。 <a href="${esc(importURL(imported.link))}" target="_blank" rel="noopener noreferrer">查看原始連結</a>${importURL(imported.sales)&&imported.sales!==imported.link?` · <a href="${esc(importURL(imported.sales))}" target="_blank" rel="noopener noreferrer">查看報名／售票頁</a>`:""}</div>`:""}
+  ${draft?.linked?'<p class="draft-note">已保留原始網址。請核對帶入的資料，並補齊活動頁未提供的欄位。</p>':""}
   ${postSteps(["活動與場次","地點與參與資訊","照片與送審"])}
   <section class="post-step"><h4 tabindex="-1">活動與場次</h4>
   <div class="r"><label>活動來源<select id="event-source">${imported?"":'<option value="hosted">自己主辦</option>'}<option value="shared" ${e?.shared_organizer||imported?"selected":""}>轉貼他人活動</option></select></label>
@@ -1495,7 +1496,7 @@ function form(e,draft,template,append=false){
   $("#schrows").addEventListener("change",updateBookingFields);
   fillDist(e?.district);kindUI();drawChips();drawSch();showAges();showOptions();
   bindDraft("event",editing,draft,{
-    extra:()=>({FD,FS,...(imported?{culture:imported}:{})}),
+    extra:()=>({FD,FS,...(imported?{culture:imported}:{}),...(draft?.linked?{linked:true}:{})}),
     beforeRestore(old){
       FD=Array.isArray(old.FD)?[...old.FD]:[];
       FS=Array.isArray(old.FS)?old.FS.map(x=>({...x})):[];
@@ -1611,6 +1612,14 @@ function cultureSchedule(slots,now){
     return [{d,s,e:end&&end[2]!=="23:59"&&end[2]>s?end[2]:""}];
   }).sort((a,b)=>a.d.localeCompare(b.d)||a.s.localeCompare(b.s)).slice(0,MAX_SESSIONS);
 }
+function eventPlaceFromAddress(address){
+  const normalized=searchText(address).replace(/^台灣\s*/,"");
+  const named=CITIES.filter(city=>normalized.includes(city));
+  const area=city=>DIST[city].find(d=>normalized.replaceAll(city,"").trimStart().replace(/^\d{3,6}\s*/,"").startsWith(searchText(d)));
+  const cities=named.length?named:CITIES.filter(area);
+  const city=cities.length===1?cities[0]:"";
+  return {city,district:city?area(city)||"":""};
+}
 function cultureCandidates(items,now){
   const today=ymd(taipeiDate(now)),until=ymd(taipeiDate(+now+30*864e5)),seen=new Set();
   const date=value=>cultureText(value).replaceAll("/","-");
@@ -1626,11 +1635,7 @@ function cultureCandidates(items,now){
     const future=slots.filter(x=>date(x.time).slice(0,10)>=today).sort((a,b)=>date(a.time).localeCompare(date(b.time)));
     const slot=future[0]||slots[0]||{};
     const address=cultureText(slot.location),venue=cultureText(slot.locationName);
-    const normalized=searchText(address);
-    const matchesCity=CITIES.filter(city=>normalized.includes(city));
-    const area=city=>DIST[city].find(d=>normalized.replace(/^\d*\s*/,"").replace(city,"").trimStart().startsWith(searchText(d)));
-    const guesses=matchesCity.length?matchesCity:CITIES.filter(area);
-    const city=guesses.length===1?guesses[0]:"";
+    const {city,district}=eventPlaceFromAddress(address);
     const description=cultureDescription(row.descriptionFilterHtml);
     const lines=description.split(/\r?\n/).map(cultureText).filter(Boolean);
     const explicitOrganizer=lines.map(line=>line.match(/^主辦(?:單位|方)?\s*[：:]\s*(.{1,100})$/)?.[1]).find(Boolean);
@@ -1654,9 +1659,9 @@ function cultureCandidates(items,now){
     const online=/線上(?:展|活動|觀看|欣賞)/.test(title);
     const missing=[!organizer&&"主辦方",!description&&"活動說明",!evidence&&"親子對象",
       !ageDetail&&audience!=="parents"&&"適齡",(!schedule.length||schedule.some(row=>!row.e)||sameVenue.length!==future.length)&&"場次",
-      (!online&&(!city||!venue||!area(city)))&&"地點",(!price||(!fee&&!/^(免費|免費入場|免費參加)[。！!]?$/.test(price)))&&"費用"].filter(Boolean);
+      (!online&&(!city||!venue||!district))&&"地點",(!price||(!fee&&!/^(免費|免費入場|免費參加)[。！!]?$/.test(price)))&&"費用"].filter(Boolean);
     return [{
-      uid,title,first,last,link,sales,organizer,address,venue,city,district:city?area(city):"",
+      uid,title,first,last,link,sales,organizer,address,venue,city,district,
       price,single:first===last,online,evidence,details,missing,
       note:missing.length?`文化部資料仍待核對：${missing.join("、")}。`:""
     }];
@@ -1742,6 +1747,108 @@ function openWebDraft(link,row){
     venue:row?.venue||"",organizer:row?.organizer||"",district:cultureText(details.district),
     address:cultureText(details.address),price:"",details,evidence:row?.audience_evidence,note:row?.review_note});
 }
+function linkedEventItem(link,page={}){
+  const parse=value=>{
+    if(!/^\d{4}-\d{2}-\d{2}(?:$|[T ]\d{2}:\d{2})/.test(value||""))return {};
+    if(/(?:Z|[+-]\d{2}:?\d{2})$/i.test(value)){
+      const date=taipeiDate(value);
+      if(Number.isFinite(+date))return {day:ymd(date),time:hm(date)};
+    }
+    return {day:value.slice(0,10),time:value.slice(11,16)};
+  };
+  const start=parse(page.start),end=parse(page.end);
+  const single=!!start.day&&(!end.day||start.day===end.day);
+  const sessions=Array.isArray(page.sessions)&&page.sessions.length?page.sessions:[page];
+  const slots=new Map();
+  for(const session of sessions){
+    const from=parse(session.start),to=parse(session.end);
+    if(!from.day||!from.time||(to.day&&to.day!==from.day))continue;
+    slots.set(from.day+" "+from.time,{d:from.day,s:from.time,e:to.day===from.day&&to.time>from.time?to.time:""});
+  }
+  const schedule=[...slots.values()];
+  const address=cultureDescription(page.address),place=eventPlaceFromAddress(address);
+  return {web:true,link,title:cultureDescription(page.title),first:start.day||"",last:end.day||start.day||"",
+    single,online:page.online===true,organizer:cultureDescription(page.organizer),venue:cultureDescription(page.venue),address,
+    ...place,price:"",details:{description:cultureDescription(page.description),age_detail:cultureDescription(page.age),fee:page.fee,schedule}};
+}
+function startLinkedEvent(link,source,page){
+  const {culture,...draft}=externalDraft(linkedEventItem(link,page),new Date().toISOString());
+  draft.id="post-"+draft.id;
+  draft.linked=true;
+  draft.fields=draft.fields.filter(field=>field.value||!["event-age-preset","event-fau"].includes(field.id));
+  draft.fields.find(field=>field.id==="event-source").value=source;
+  const saved=readDrafts("event").find(row=>row.id===draft.id);
+  form(null,saved||draft);
+  if(!saved)saveActiveDraft(true);
+}
+const EVENT_LINK_HOSTS=new Set(["www.accupass.com","accupass.com","www.opentix.life","opentix.life","huanminvillage.taipei","www.tfam.museum","kfa.kcg.gov.tw"]);
+const canReadEventLink=link=>link.startsWith("https://")&&EVENT_LINK_HOSTS.has(new URL(link).hostname);
+async function readEventLink(link){
+  if(!canReadEventLink(link))return {code:"unsupported"};
+  const {data,error}=await sb.functions.invoke("event-link-draft",{body:{url:link}});
+  return error?{code:"unavailable"}:data;
+}
+async function enrichCultureItem(item){
+  const link=[item.sales,item.link].find(canReadEventLink);
+  if(!link||!item.missing.length)return item;
+  const {draft}=await readEventLink(link)||{};
+  if(!draft?.title)return item;
+  const comparable=value=>searchText(cultureDescription(value)).replace(/[^\p{L}\p{N}]/gu,"");
+  const listed=comparable(item.title),found=comparable(draft.title);
+  if(listed!==found&&(Math.min(listed.length,found.length)<8||!found.includes(listed)&&!listed.includes(found)))return item;
+  const official=linkedEventItem(link,draft);
+  const details={...item.details};
+  if(!details.description&&official.details.description)details.description=official.details.description;
+  if(!details.age_detail&&official.details.age_detail)details.age_detail=official.details.age_detail;
+  if(details.fee==null&&Number.isInteger(official.details.fee))details.fee=official.details.fee;
+  const sessions=official.details.schedule.filter(slot=>slot.e&&slot.d>=item.first&&slot.d<=item.last);
+  if(sessions.length>=details.schedule.length&&sessions.length)details.schedule=sessions;
+  const merged={...item,details,organizer:item.organizer||official.organizer,venue:item.venue||official.venue,
+    address:item.address||official.address,city:item.city||official.city,district:item.district||official.district};
+  const supplied={"主辦方":merged.organizer,"活動說明":details.description,"適齡":details.age_detail,
+    "場次":sessions.length&&sessions.length===details.schedule.length,"地點":merged.city&&merged.district&&merged.venue,
+    "費用":Number.isInteger(details.fee)};
+  merged.missing=item.missing.filter(field=>!supplied[field]);
+  merged.note=merged.missing.length?`來源仍待核對：${merged.missing.join("、")}。`:"";
+  return merged;
+}
+function newEventOptions(){
+  const uid=AUTH.u?.id;
+  modal(`<h3>分享一個活動</h3><p class="mu">貼上公開活動頁，帶入網站有提供的資訊。支援 ACCUPASS、OPENTIX 和部分場館活動頁。</p>
+    <form id="post-link-form"><label>活動網址<input id="post-link" type="url" maxlength="1000" placeholder="https://" required></label>
+    <label>活動來源<select id="post-link-source"><option value="hosted">自己主辦</option><option value="shared">轉貼他人活動</option></select></label>
+    <p id="post-link-status" class="mu" role="status"></p><div class="r"><button id="post-link-fetch" class="p" type="submit">帶入活動資料</button>
+    <button id="post-link-manual" type="button">手動填寫</button></div></form>`);
+  const input=$("#post-link"),source=$("#post-link-source"),status=$("#post-link-status"),fetchButton=$("#post-link-fetch");
+  const url=()=>{
+    const value=importURL(input.value.trim());
+    if(!value)return "";
+    const link=new URL(value);
+    for(const key of [...link.searchParams.keys()])if(/^utm_|^fbclid$/i.test(key))link.searchParams.delete(key);
+    return link.href;
+  };
+  $("#post-link-manual").onclick=()=>{
+    const link=url();
+    if(link)startLinkedEvent(link,source.value);
+    else form();
+  };
+  $("#post-link-form").onsubmit=async event=>{
+    event.preventDefault();
+    const link=url();
+    if(!link||link.length>1000){status.textContent="請輸入有效的活動網址。";return}
+    fetchButton.disabled=true;
+    status.textContent="正在讀取公開活動頁…";
+    try{
+      const data=await readEventLink(link);
+      if(!status.isConnected||AUTH.u?.id!==uid)return;
+      if(data?.draft){startLinkedEvent(link,source.value,data.draft);return}
+      status.textContent=data?.code==="limit"?"今天的網址帶入次數已用完。仍可保留網址並手動填寫。":
+        "這個活動頁目前無法自動帶入。可保留網址並手動填寫。";
+    }catch{
+      if(status.isConnected)status.textContent="目前無法讀取活動頁，可保留網址並手動填寫。";
+    }finally{fetchButton.disabled=false}
+  };
+}
 async function importCulture(refresh=false){
   const uid=AUTH.u?.id;
   if(!uid||!AUTH.me?.is_admin||AUTH.me.suspended)return;
@@ -1781,9 +1888,14 @@ async function importCulture(refresh=false){
       <div class="r"><a href="${esc(item.link)}" target="_blank" rel="noopener noreferrer">查看來源 ↗</a>
       ${posted(item)?'<span class="mu">已送審或發布</span>':`<button class="p" data-culture-index="${i}">${drafts.has("moc-"+item.uid)?"繼續核對":"核對並匯入"}</button>`}</div></article>`).join("");
     $("#culture-reload").onclick=()=>importCulture(true);
-    choices.querySelectorAll("[data-culture-index]").forEach(button=>button.onclick=()=>{
+    choices.querySelectorAll("[data-culture-index]").forEach(button=>button.onclick=async()=>{
       if(!allowed())return;
-      openImportDraft(items[Number(button.dataset.cultureIndex)]);
+      const item=items[Number(button.dataset.cultureIndex)];
+      button.disabled=true;
+      message.textContent="正在核對來源可帶入的資料…";
+      let filled=item;
+      try{filled=await enrichCultureItem(item)}catch{}
+      if(allowed())openImportDraft(filled);
     });
     message.textContent=(liveError?"即時來源讀取失敗，以下為上次更新。":"")+
       `資料時間 ${importDateTime.format(new Date(fetchedAt))}。目前有 ${items.length} 筆候選，請到官方頁核對場次、適齡和報名資訊。`;
