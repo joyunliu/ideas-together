@@ -515,7 +515,7 @@ function home(){
   $("#app").innerHTML=`<div class="section-head hrow"><h2>親子活動日曆</h2><button class="p" data-a="e.new">＋ 分享活動</button></div><p class="mu" style="margin:-4px 8px 12px">查看近期活動，依地點、年齡、費用與時間篩選。活動資訊由主辦方提供，請以主辦方公告為準。</p>
   <div class="filter-panel"><div class="search-wrap"><input id="q" aria-label="搜尋活動" placeholder="搜尋活動名稱、說明或地點…" value="${esc(S.q)}"></div>
   <div class="filter-label">快速找活動（可複選）</div><div class="filter-row">${grp("when",[["today","今天"],["weekend","本週末"],["7d","7 天內"],["month","本月"]])}<button data-a="e.favonly" class="${S.favOnly?"on":""}">只看我的收藏</button></div>
-  <div class="filter-label">時段（可複選）</div><div class="filter-row">${grp("tod",[["am","早上"],["pm","下午"],["ev","晚上"],["all","整天"]])}</div>
+  <div class="filter-label">時段（可複選）</div><div class="filter-row">${grp("tod",[["am","早上"],["pm","下午"],["ev","晚上"]])}</div>
   <details class="advanced" ${S.advOpen?"open":""}><summary>更多篩選條件（地點、年齡、費用、對象、主辦方，皆可複選）</summary>
   <div class="filter-label">縣市</div><div class="filter-row">${grp("city",CITIES.map(c=>[c,c]))}</div>
   <div class="filter-label">孩子年齡</div><div class="filter-row">${grp("age",Array.from({length:13},(_,i)=>[i,i+" 歲"]))}</div>
@@ -536,7 +536,7 @@ function draw(){
   document.querySelectorAll("[data-a='e.sort']").forEach(b=>b.classList.toggle("on",b.dataset.v===S.sort));
   $("#cal").innerHTML=cal(base);
   $("#fcount").textContent=`找到 ${base.length} 筆活動`+(S.day?" · 已選日期":"");
-  const active=[],labels={today:"今天",weekend:"本週末","7d":"7 天內",month:"本月",am:"早上",pm:"下午",ev:"晚上",all:"整天",free:"免費",paid:"付費",family:"親子",kids:"只有孩子",parents:"只有家長",personal:"個人主辦",organization:"商家／機構"};for(const k of ["when","city","age","fee","org","aud","tod"])for(const v of S[k])active.push(k==="city"?v:k==="age"?v+" 歲":(labels[v]||v));if(S.favOnly)active.push("只看收藏");if(S.q.trim())active.push("搜尋："+S.q.trim());
+  const active=[],labels={today:"今天",weekend:"本週末","7d":"7 天內",month:"本月",am:"早上",pm:"下午",ev:"晚上",free:"免費",paid:"付費",family:"親子",kids:"只有孩子",parents:"只有家長",personal:"個人主辦",organization:"商家／機構"};for(const k of ["when","city","age","fee","org","aud","tod"])for(const v of S[k])active.push(k==="city"?v:k==="age"?v+" 歲":(labels[v]||v));if(S.favOnly)active.push("只看收藏");if(S.q.trim())active.push("搜尋："+S.q.trim());
   const chipBox=document.querySelector("#active-event-filters");if(chipBox)chipBox.innerHTML=active.map(x=>`<span>${esc(x)}</span>`).join("");
   $("#lt").textContent=S.day?S.day.replace(/-/g,"/")+" 的活動（"+l.length+"）":(S.sort==="new"?"最新活動":"近期活動")+"（"+l.length+"）";
   $("#el").innerHTML=(S.day?'<button data-a="e.day" data-k="">顯示全部日期</button>':"")+(l.map(ecard).join("")||`<p class="mu">${S.ev.length?"沒有符合條件的活動，換個條件試試看。":"還沒有活動，歡迎主辦方分享！"}</p>`);
