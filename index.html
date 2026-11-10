@@ -233,7 +233,7 @@ ACT.menu=el=>{const mn=$("#menu");if(!mn)return;const o=mn.classList.toggle("s")
 const G=(()=>{
 let T=0;
 function route(){return ROUTE(true)}
-const AGES=["0–1 歲","1–2 歲","2–3 歲","3–4 歲","4–6 歲","6 歲以上"],DURATIONS=["5 分鐘內","5–15 分鐘","15–30 分鐘","30 分鐘以上"],TAGS=["5 分鐘內","安靜玩","室內","小空間","戶外","免準備","手作"];
+const AGES=["0–1 歲","1–2 歲","2–3 歲","3–4 歲","4–6 歲","6 歲以上","小一～小二","小三～小四","小五～小六"],DURATIONS=["5 分鐘內","5–15 分鐘","15–30 分鐘","30 分鐘以上"],TAGS=["5 分鐘內","安靜玩","室內","小空間","戶外","免準備","手作"];
 const REASONS=["廣告或商業推廣","照片涉及隱私或著作權","連結不適當","內容不完整","不適合該年齡","重複投稿","不當內容"];
 const S={get u(){return AUTH.u},get me(){return AUTH.me},games:[],likes:[],favs:[],played:[],q:"",ages:new Set(),have:new Set(),tags:new Set(),sort:"new",fav:false};
 const cnt=(a,id)=>a.filter(x=>x.game_id===id).length,has=(a,id)=>S.u&&a.some(x=>x.game_id===id&&x.user_id===S.u.id);
@@ -302,7 +302,7 @@ function list(){
 }
 function card({g,miss}){
   const hv=S.have.size?`<span class="t ok">${miss?"還缺 "+miss+" 樣":"材料齊全"}</span>`:"";
-  return `<article class="c" data-go="#/games/g/${g.id}"><div class="ph">${g.photos[0]?`<img loading="lazy" src="${pub(g.photos[0])}" alt="${esc(g.title)}" onerror="this.style.display='none'">`:""}</div><div class="cb"><div><span class="t ag">${AGES[g.age]}</span>${g.duration_label?`<span class="t">${esc(g.duration_label)}</span>`:""}${hv}</div><b>${esc(g.title)}</b><div class="mu">♥ ${cnt(S.likes,g.id)}　★ ${cnt(S.favs,g.id)}　·　${g.materials.length?`材料 ${g.materials.length} 種`:"免材料"}　·　瀏覽 ${Number(g.view_count||0)}</div><div style="margin-top:6px">${g.materials.slice(0,2).map(m=>`<span class="t">${esc(m)}</span>`).join("")}${g.materials.length>2?`<span class="t">＋${g.materials.length-2}</span>`:""}</div></div></article>`;
+  return `<article class="c" data-go="#/games/g/${g.id}"><div class="ph">${g.photos[0]?`<img loading="lazy" src="${pub(g.photos[0])}" alt="${esc(g.title)}" onerror="this.style.display='none'">`:""}</div><div class="cb"><div><span class="t ag">${AGES[g.age]||"未指定年齡"}</span>${g.duration_label?`<span class="t">${esc(g.duration_label)}</span>`:""}${hv}</div><b>${esc(g.title)}</b><div class="mu">♥ ${cnt(S.likes,g.id)}　★ ${cnt(S.favs,g.id)}　·　${g.materials.length?`材料 ${g.materials.length} 種`:"免材料"}　·　瀏覽 ${Number(g.view_count||0)}</div><div style="margin-top:6px">${g.materials.slice(0,2).map(m=>`<span class="t">${esc(m)}</span>`).join("")}${g.materials.length>2?`<span class="t">＋${g.materials.length-2}</span>`:""}</div></div></article>`;
 }
 function home(){
   const cn={};S.games.filter(g=>g.status==="approved").forEach(g=>g.materials.forEach(m=>cn[m]=(cn[m]||0)+1));
@@ -327,8 +327,8 @@ async function detail(id){
   const mine=S.u&&g.author_id===S.u.id,B=(t,l)=>`<button data-a="g.toggle" data-t="${t}" data-id="${id}" class="${has(S[t],id)?"on":""}">${l}</button>`;
   $("#app").innerHTML=`<p><a data-go="#/games">← 返回</a></p><h2 style="margin:0">${esc(g.title)}</h2>
   ${g.status!=="approved"?`<p class="rule">${g.status==="pending"?"審核中，目前只有你和管理員看得到。":"已被退回："+esc(g.reject_reason)+"。修改後可重新送審。"}</p>`:""}
-  ${g.photos.length?`<div class="pics">${g.photos.map(p=>`<a href="${pub(p)}" target="_blank"><img src="${pub(p)}" alt=""></a>`).join("")}</div>`:""}
-  <p class="mu"><span class="t ag">${AGES[g.age]}</span> 作者：<a data-go="#/games/by/${g.author_id}">${esc(nick(g))}</a> · ${cnt(S.played,id)} 個家庭玩過 · 瀏覽 ${views}</p>
+  ${g.photos.length?`<div class="pics">${g.photos.map(p=>`<a href="${pub(p)}" target="_blank"><img loading="lazy" decoding="async" src="${pub(p)}" alt=""></a>`).join("")}</div>`:""}
+  <p class="mu"><span class="t ag">${AGES[g.age]||"未指定年齡"}</span> 作者：<a data-go="#/games/by/${g.author_id}">${esc(nick(g))}</a> · ${cnt(S.played,id)} 個家庭玩過 · 瀏覽 ${views}</p>
   <div>${g.tags.map(t=>`<span class="t ok">${esc(t)}</span>`).join("")}</div>
   <p><b>大約遊玩時間</b><br>${g.duration_label?esc(g.duration_label):"尚未標示"}</p>
   <p><b>需要的材料</b><br>${g.materials.length?g.materials.map(m=>`<span class="t">${esc(m)}</span>`).join(""):'<span class="mu">不需要特別材料</span>'}</p>
@@ -338,7 +338,7 @@ async function detail(id){
   <h3>變化玩法與留言（${cs.length}）</h3>${cs.map(c=>`<div class="cm"><b>${esc(nick(c))}</b> <span class="mu">${new Date(c.created_at).toLocaleDateString("zh-TW")}</span><br>${esc(c.body).replace(/\n/g,"<br>")}<div class="mu"><a data-a="g.report" data-k="comment_id" data-id="${c.id}">檢舉</a>${S.u&&(c.user_id===S.u.id||S.me?.is_admin)?` · <a data-a="g.delcm" data-id="${c.id}">刪除</a>`:""}</div></div>`).join("")}
   ${S.u?`<textarea id="cin" rows="3" maxlength="300" placeholder="分享你的變化玩法或心得（300 字內）"></textarea><button class="p" data-a="g.cm" data-id="${id}">送出留言</button>`:'<p class="mu">登入後即可按讚、收藏、留言。</p>'}`;
 }
-function mini(g,extra=""){return `<div class="cm"><a data-go="#/games/g/${g.id}"><b>${esc(g.title)}</b></a> <span class="mu">${AGES[g.age]} ${extra}</span></div>`}
+function mini(g,extra=""){return `<div class="cm"><a data-go="#/games/g/${g.id}"><b>${esc(g.title)}</b></a> <span class="mu">${AGES[g.age]||"未指定年齡"} ${extra}</span></div>`}
 function author(id){
   const l=S.games.filter(g=>g.author_id===id&&g.status==="approved"),n=l[0]?nick(l[0]):"這位家長";
   $("#app").innerHTML=`<p><a data-go="#/games">← 返回</a></p><h2>${esc(n)} 分享的遊戲（${l.length}）</h2>${S.u&&S.u.id!==id?`<button data-a="g.report" data-k="target_user_id" data-id="${id}">檢舉這位作者</button>`:""}<div class="g">${l.map(g=>card({g,miss:0})).join("")}</div>`;
@@ -735,7 +735,7 @@ async function accountPage(){
   const fG=gs.games.filter(g=>g.status==="approved"&&gs.favs.some(f=>f.game_id===g.id&&f.user_id===uid));
   const fE=es.ev.filter(e=>e.status==="approved"&&es.efavs.some(f=>f.event_id===e.id&&f.user_id===uid));
   const sc=x=>x.status!=="approved"?` · <b>${st[x.status]}</b>${x.reject_reason?"："+esc(x.reject_reason):""}`:" · 已發佈";
-  const gi=(g,mine)=>`<div class="cm"><a data-go="#/games/g/${g.id}"><b>${esc(g.title)}</b></a> <span class="mu">${G.AGES[g.age]}${mine?sc(g):""}</span><div class="r">${mine?`<button data-a="g.edit" data-id="${g.id}">編輯</button><button class="d" data-a="g.delgame" data-id="${g.id}">刪除</button>`:`<button data-a="g.toggle" data-t="favs" data-id="${g.id}">取消收藏</button>`}</div></div>`;
+  const gi=(g,mine)=>`<div class="cm"><a data-go="#/games/g/${g.id}"><b>${esc(g.title)}</b></a> <span class="mu">${G.AGES[g.age]||"未指定年齡"}${mine?sc(g):""}</span><div class="r">${mine?`<button data-a="g.edit" data-id="${g.id}">編輯</button><button class="d" data-a="g.delgame" data-id="${g.id}">刪除</button>`:`<button data-a="g.toggle" data-t="favs" data-id="${g.id}">取消收藏</button>`}</div></div>`;
   const ei=(e,mine)=>`<div class="cm"><a data-go="#/events/e/${e.id}"><b>${esc(e.title)}</b></a> <span class="mu">${E.tRange(e)} · ${esc(e.city)}${mine?sc(e):""}</span><div class="r">${mine?`<button data-a="e.edit" data-id="${e.id}">編輯</button><button class="d" data-a="e.del" data-id="${e.id}">刪除</button>`:`<button data-a="e.toggle" data-t="event_favs" data-id="${e.id}">取消收藏</button>`}</div></div>`;
   const tb=(k,t)=>`<button data-a="a.tab" data-v="${k}" class="${ACC.tab===k?"on":""}">${t}</button>`;
   const none='<p class="mu">還沒有內容。</p>';
@@ -759,7 +759,7 @@ async function adminPage(){
   const{data:sp}=await sb.from("profiles").select("id,nickname").eq("suspended",true);
   const{data:rb}=await sb.from("profiles").select("id,nickname,bio,website,bio_updated_at").not("bio_updated_at","is",null).gte("bio_updated_at",new Date(Date.now()-14*864e5).toISOString()).order("bio_updated_at",{ascending:false});
   const{AGES,REASONS:GR,nick:gn}=G,{REASONS:ER,nick:en,tRange,ageTxt,feeTxt,AUD,isOrg,orgTag}=E;
-  const gItem=g=>`<div class="cm"><a data-go="#/games/g/${g.id}"><b>${esc(g.title)}</b></a> <span class="mu">${esc(gn(g))} · ${AGES[g.age]}</span><div class="r">${g.photos.map(x=>`<img src="${pub(x)}" alt="" width="90">`).join("")}</div><p>${esc(g.how)}</p>${g.link?`<p class="mu">連結：<a href="${esc(g.link)}" target="_blank" rel="noopener noreferrer nofollow">${esc(g.link)}</a></p>`:""}<div class="r"><button class="p" data-a="g.approve" data-id="${g.id}">核准</button>退回：${GR.map(r=>`<button class="d" data-a="g.reject" data-id="${g.id}" data-r="${r}">${r}</button>`).join("")}</div></div>`;
+  const gItem=g=>`<div class="cm"><a data-go="#/games/g/${g.id}"><b>${esc(g.title)}</b></a> <span class="mu">${esc(gn(g))} · ${AGES[g.age]||"未指定年齡"}</span><div class="r">${g.photos.map(x=>`<img src="${pub(x)}" alt="" width="90">`).join("")}</div><p>${esc(g.how)}</p>${g.link?`<p class="mu">連結：<a href="${esc(g.link)}" target="_blank" rel="noopener noreferrer nofollow">${esc(g.link)}</a></p>`:""}<div class="r"><button class="p" data-a="g.approve" data-id="${g.id}">核准</button>退回：${GR.map(r=>`<button class="d" data-a="g.reject" data-id="${g.id}" data-r="${r}">${r}</button>`).join("")}</div></div>`;
   const eItem=e=>`<div class="cm"><a data-go="#/events/e/${e.id}"><b>${esc(e.title)}</b></a> ${orgTag(e)} <span class="mu">${esc(en(e))} · ${tRange(e)} · ${esc(e.city)}${esc(e.district||"")} · ${ageTxt(e)} · ${feeTxt(e)}</span>${e.photo?`<div class="r"><img src="${pub(e.photo)}" alt="" width="120"></div>`:""}<p>${esc(e.description)}</p>${isOrg(e)&&e.profiles?.bio?`<p class="mu">主辦方簡介：${esc(e.profiles.bio)}${e.profiles.website?"｜"+esc(e.profiles.website):""}</p>`:""}<p class="mu">對象：${AUD[e.audience]||"親子"}${e.flex_time?"｜無特定時間／可自行預約":""}</p>${e.link?`<p class="mu">連結：<a href="${esc(e.link)}" target="_blank" rel="noopener noreferrer nofollow">${esc(e.link)}</a></p>`:""}${e.address?`<p class="mu">地址：${esc(e.address)}</p>`:""}${e.map_link?`<p class="mu">地圖連結：<a href="${esc(e.map_link)}" target="_blank" rel="noopener noreferrer nofollow">${esc(e.map_link)}</a></p>`:""}<div class="r"><button class="p" data-a="e.approve" data-id="${e.id}">核准</button>退回：${ER.map(r=>`<button class="d" data-a="e.reject" data-id="${e.id}" data-r="${r}">${r}</button>`).join("")}</div></div>`;
   const rItem=r=>`<div class="cm">${r.game_id?`<a data-go="#/games/g/${r.game_id}">遊戲：${esc(r.games?.title)}</a>`:r.comment_id?`留言：${esc(r.comments?.body)}${r.comments?.game_id?` <a data-go="#/games/g/${r.comments.game_id}">前往遊戲</a>`:""}`:r.event_id?`<a data-go="#/events/e/${r.event_id}">活動：${esc(r.events?.title)}</a>`:`作者／主辦方：${esc(r.target?.nickname)}${r.target?.suspended?"（已停權）":""} <a data-a="${r.target?.suspended?"x.unsus":"x.sus"}" data-id="${r.target_user_id}">${r.target?.suspended?"解除停權":"停權"}</a>`}<br>原因：${esc(r.reason)} <a data-a="x.delrep" data-id="${r.id}">忽略此檢舉</a></div>`;
   const bItem=u=>`<div class="cm"><a data-go="#/events/org/${u.id}"><b>${esc(u.nickname)}</b></a> <span class="mu">${new Date(u.bio_updated_at).toLocaleDateString("zh-TW")}</span><p style="margin:4px 0 0">${esc(u.bio)}${u.website?" ｜ "+esc(u.website):""}</p></div>`;
