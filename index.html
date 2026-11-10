@@ -867,7 +867,7 @@ const EVENT_AGES=[["0–1 歲",0,1],["1–2 歲",1,2],["2–3 歲",2,3],["3–4 
 const AGE_PRESETS=[["各年齡",0,12],...EVENT_AGES];
 const ageKey=(min,max)=>min+"-"+max;
 const agePreset=(min,max)=>AGE_PRESETS.some(([,a,b])=>a===min&&b===max)?ageKey(min,max):"custom";
-const BOOKING={walkin:"免報名",open:"有正取名額",waitlist:"僅候補",upcoming:"尚未開放",full:"已額滿",cancelled:"已取消"};
+const BOOKING={walkin:"免報名",open:"有正取名額",waitlist:"僅候補",upcoming:"尚未開放",check:"請自行確認",full:"已額滿",cancelled:"已取消"};
 const EVENT_TITLE_LIMIT=50;
 const bookingOptions=(value="",placeholder="尚未確認")=>'<option value="">'+placeholder+'</option>'+Object.entries(BOOKING).map(([k,label])=>`<option value="${k}" ${value===k?"selected":""}>${label}</option>`).join("");
 const bookingState=(e,slot)=>["cancelled","full"].includes(e.booking_status)?e.booking_status:(slot&&Object.hasOwn(BOOKING,slot.booking)?slot.booking:e.booking_status);
@@ -1182,12 +1182,14 @@ function eventRegistration(e,slot){
   if(!/^https?:\/\//i.test(e.link||""))return null;
   try{
     const url=new URL(e.link);
-    if(bookingState(e,slot)==="walkin")return {label:"免報名・看活動公告"};
+    const state=bookingState(e,slot);
+    if(state==="walkin")return {label:"免報名・看活動公告"};
     if(url.hostname==="lovebaby.sw.ntpc.gov.tw"){
       const venue=[e.district,e.venue].filter(Boolean).join(" → ");
       const activity=String(e.title).split("｜")[0];
       return {label:"到官網查場次",hint:venue?`查找 ${venue}，再找「${activity}」`:"請在官網選擇行政區與親子館"};
     }
+    if(state==="check")return {label:"前往報名頁確認",hint:"名額請以主辦方報名頁為準，可能需要登入或註冊。"};
   }catch{return null}
   if(e.flex_time)return {label:"前往主辦方預約"};
   return {label:e.shared_organizer?"查看主辦方公告":"前往報名／詳情"};
@@ -1456,7 +1458,8 @@ function form(e,draft,template,append=false){
   <div class="r"><label>起始月齡（選填）<input id="event-age-min-month" type="number" min="0" max="155" value="${esc(e?.age_min_month)}"></label><label>結束月齡（選填）<input id="event-age-max-month" type="number" min="0" max="155" value="${esc(e?.age_max_month)}"></label></div>
   <label>參與對象<select id="event-fau">${imported?'<option value="" selected>請確認參與對象</option>':""}<option value="family" ${!imported&&(!e||e.audience==="family")?"selected":""}>親子（家長與孩子一起）</option><option value="kids" ${e&&e.audience==="kids"?"selected":""}>只有孩子（家長不需陪同）</option><option value="parents" ${e&&e.audience==="parents"?"selected":""}>只有家長（例如講座）</option></select></label>
   <div class="r"><label>費用（元，免費填 0）<input id="event-ff" type="number" min="0" max="100000" value="${e?e.fee:imported?"":0}"></label><label>費用說明（選填，例如：含材料費）<input id="event-fn" maxlength="60" value="${esc(e?.fee_note)}"></label></div>
-  <div id="event-booking-field"><label><span id="event-booking-label">報名狀態</span><select id="event-booking" aria-describedby="event-booking-hint">${bookingOptions(editing?.booking_status,imported?"請選擇報名狀態":"尚未確認")}</select></label>
+  <div id="event-booking-field"><label><span id="event-booking-label">報名狀態</span><select id="event-booking" aria-describedby="event-booking-hint event-booking-check-hint">${bookingOptions(editing?.booking_status,imported?"請選擇報名狀態":"尚未確認")}</select></label>
+  <p id="event-booking-check-hint" class="mu">需要登入或註冊才能看名額時，可以選「請自行確認」。</p>
   <p id="event-booking-hint" class="mu" hidden>只套用到第 1 步選了「使用第 2 步的共用狀態」的場次。</p></div>
   <p id="event-booking-complete" class="mu" hidden>每場都已填寫報名狀態，這裡不用再選。</p>
   ${editing?.booking_checked_at?'<label><input type="checkbox" id="event-recheck" style="width:auto"> 我已重新確認目前的報名狀態</label>':""}
@@ -1466,7 +1469,7 @@ function form(e,draft,template,append=false){
   <label><span id="event-link-label"></span><input id="event-fl" type="url" maxlength="200" placeholder="https://" value="${esc(e?.link)}"></label>
   </section><section class="post-step" hidden><h4 tabindex="-1">照片與送審</h4><p class="post-preview"></p>
   ${imported?`<label>來源明確標示的參加對象（必填）<input id="event-audience-evidence" maxlength="160" placeholder="例如：親子 1 大 1 小，孩子須滿 6 歲" value="${esc(imported.evidence)}"></label>
-  <label><input id="event-confirm-availability" type="checkbox" style="width:auto"> 我已核對來源的參加對象、場次和報名狀態</label>`:""}
+  <label><input id="event-confirm-availability" type="checkbox" style="width:auto"> 我已核對參加對象與場次，並依來源可查到的資訊填寫報名狀態</label>`:""}
   <label>活動照片（選填，1 張${editing?"；不選就保留原圖":""}）<input id="event-fp" type="file" accept="image/*"></label>
   </section>${postActions("event",imported?"加入待發布清單":editing?"儲存並重新送審":"送出審核")}</div>`);
   const val=id=>$("#event-"+id)?.value.trim()||"";
@@ -1531,7 +1534,10 @@ function form(e,draft,template,append=false){
           if(shared()&&val("fau")!=="parents"&&/^(全齡|各年齡|不限|闔家|全家)$/.test(ageDetail))return "請填寫主辦方公告的具體年齡、月齡或年級。";
           if(!editing&&shared()&&val("fau")!=="parents"&&!from&&!ageDetail&&min===0&&max===12)return "轉貼活動需填寫主辦方明確公告的年齡、月齡或年級。";
           if(!val("ff")||!Number.isInteger(fee)||fee<0||fee>100000)return "費用請填 0 到 100000 之間的整數。";
-          if(imported&&!updateBookingFields()&&!val("booking"))return "請選擇報名狀態。有多個場次時，也可以回到第 1 步逐場填寫。";
+          const ownBooking=updateBookingFields();
+          if(imported&&!ownBooking&&!val("booking"))return "請選擇報名狀態。有多個場次時，也可以回到第 1 步逐場填寫。";
+          const slots=$("[name=event-fk]:checked")?.value==="sched"?FS:[];
+          if((!ownBooking&&val("booking")==="check"||slots.some(slot=>slot.booking==="check"))&&!importURL(link))return "選擇「請自行確認」時，請提供主辦方的報名或詳情連結。";
           if(!val("fh")||(imported&&!imported.web&&val("fh")===culturePlaceholder(imported.title)))return "請填寫活動說明，例如活動內容和參加方式。";
           if(shared()&&!link)return "請提供主辦方的官方公告或報名連結。";
           if(online()&&!link)return "請提供線上參加方式或報名連結。";
@@ -1540,7 +1546,7 @@ function form(e,draft,template,append=false){
           if(!online()&&map&&!/^https?:\/\/[^\s]+$/i.test(map))return "地圖連結需以 http:// 或 https:// 開頭。";
         }
         if(step===2&&imported&&!FAMILY_AUDIENCE.test(val("audience-evidence")))return "請填寫來源明確標示的親子、家長或兒童對象文字。";
-        if(step===2&&imported&&!$("#event-confirm-availability").checked)return "請先到原始頁面確認參加對象、場次和報名狀態。";
+        if(step===2&&imported&&!$("#event-confirm-availability").checked)return "請核對參加對象與場次，並確認報名狀態已依來源資訊填寫。";
         if(step===2&&file()?.size>8*1024*1024)return "照片超過 8 MB。";
       },
       preview(box){
@@ -1986,7 +1992,7 @@ async function accountPage(){
   refreshDraftList();
 }
 const IMPORT_FIELDS={"title":"名稱","description":"活動說明","start_at":"開始時間","end_at":"結束時間","city":"縣市","district":"行政區","venue":"場館","address":"地址","age_min":"起始年齡","age_max":"結束年齡","fee":"費用","fee_note":"費用說明","link":"官方連結","map_link":"地圖連結","audience":"參加對象","flex_time":"自行預約","dates":"活動日期","continuous":"跨日連續","schedule":"場次與報名狀態","shared_organizer":"主辦方","series_booking":"整期報名","recurrence_note":"固定舉辦說明","age_detail":"適齡說明","age_min_month":"起始月齡","age_max_month":"結束月齡","booking_status":"報名狀態","booking_checked_at":"查核時間","listing_type":"刊登分類","visit_note":"參觀與預約方式","related_exhibition_id":"相關展覽"};
-const IMPORT_BOOKING={walkin:"免報名",open:"有正取名額",waitlist:"僅候補",upcoming:"尚未開放",full:"已額滿",cancelled:"已取消"};
+const IMPORT_BOOKING={walkin:"免報名",open:"有正取名額",waitlist:"僅候補",upcoming:"尚未開放",check:"請自行確認",full:"已額滿",cancelled:"已取消"};
 const IMPORT_CATEGORIES={event:"單場與短期活動",exhibition:"展覽",resource:"固定活動與自行預約"};
 const IMPORT_PERIODS={today:"今天",week:"本週",all:"全部待發布"};
 const FAMILY_AUDIENCE=/親子|家長|孩子|小孩|孩童|兒童|兒少|學童|幼兒|小朋友|青少年|國小|寶寶/;
