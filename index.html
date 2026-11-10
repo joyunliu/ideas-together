@@ -101,6 +101,34 @@ if(TURNSTILE_KEY){const sc=document.createElement("script");sc.src="https://chal
 const AUTH={u:null,me:null};
 const ACT={};
 const $=s=>document.querySelector(s),esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const canReview=post=>AUTH.me?.is_admin&&post?.status==="pending";
+function reviewActions(type,post,reasons){
+  if(!canReview(post))return "";
+  return `<section class="card-box" style="margin-top:16px" aria-label="投稿審核"><div class="r"><button class="p" data-a="${type}.approve" data-id="${post.id}">核准</button><button class="d" data-a="review.reasons" aria-expanded="false" aria-controls="review-reasons">退回</button></div><div id="review-reasons" hidden><p class="mu">請選擇退回原因</p><div class="r">${reasons.map(reason=>`<button class="d" data-a="${type}.reject" data-id="${post.id}" data-r="${esc(reason)}">${esc(reason)}</button>`).join("")}</div></div></section>`;
+}
+ACT["review.reasons"]=button=>{
+  const reasons=$("#review-reasons");
+  reasons.hidden=!reasons.hidden;
+  button.setAttribute("aria-expanded",String(!reasons.hidden));
+};
+async function reviewPost(button,table,post,changes,photos=[]){
+  if(!canReview(post))return;
+  const controls=[...button.closest("section").querySelectorAll("button")];
+  controls.forEach(control=>control.disabled=true);
+  try{
+    const {data,error}=await sb.from(table).update(changes).eq("id",post.id).eq("status","pending").select("id").maybeSingle();
+    if(error)throw error;
+    if(!data)alert("這筆投稿的審核狀態已變更，請重新查看。");
+    else if(photos.length){
+      const {error:storageError}=await sb.storage.from("photos").remove(photos);
+      if(storageError)alert("投稿已退回，但照片檔案移除失敗。"+zh(storageError));
+    }
+    G.reset();E.reset();
+    if(location.hash==="#/admin")await ROUTE(true);
+    else go("#/admin");
+    if(data)showToast(changes.status==="approved"?"已核准投稿":"已退回投稿");
+  }finally{controls.forEach(control=>control.disabled=false)}
+}
 const go=h=>{if(location.hash===h)ROUTE();else location.hash=h};
 const afterDel=h=>location.hash.startsWith("#/account")?ROUTE(true):go(h);
 const pub=p=>sb.storage.from("photos").getPublicUrl(p).data.publicUrl;
@@ -403,10 +431,10 @@ const act={
     if(g.photos.length)await sb.storage.from("photos").remove(g.photos);await sb.from("games").delete().eq("id",g.id);await load();afterDel("#/games")},
   edit(el){if(!need()||orgBlock())return;const post=S.games.find(x=>x.id===el.dataset.id&&x.author_id===AUTH.u.id);if(post)form(post)},
   rand(){const l=list();if(!l.length)return alert("目前沒有符合條件的遊戲");location.hash="#/games/g/"+l[Math.floor(Math.random()*l.length)].g.id},
-  async approve(el){await sb.from("games").update({status:"approved",reject_reason:null}).eq("id",el.dataset.id);await load();route()},
-  async reject(el){if(!confirm("以「"+el.dataset.r+"」退回？照片也會刪除。"))return;const g=S.games.find(x=>x.id===el.dataset.id);
-    if(g.photos.length)await sb.storage.from("photos").remove(g.photos);
-    await sb.from("games").update({status:"rejected",reject_reason:el.dataset.r,photos:[]}).eq("id",g.id);await load();route()},
+  approve(el){return reviewPost(el,"games",S.games.find(g=>g.id===el.dataset.id),{status:"approved",reject_reason:null})},
+  reject(el){const g=S.games.find(g=>g.id===el.dataset.id);
+    if(!canReview(g)||!confirm("以「"+el.dataset.r+"」退回？"+(g.photos.length?"照片也會刪除。":"")))return;
+    return reviewPost(el,"games",g,{status:"rejected",reject_reason:el.dataset.r,photos:[]},g.photos)},
   async delrep(el){await sb.from("reports").delete().eq("id",el.dataset.id);route()},
   chip(el){const k=el.dataset.k,v=el.dataset.v;if(k==="age"){const n=+v;n<0?S.ages.clear():(S.ages.has(n)?S.ages.delete(n):S.ages.add(n))}else if(k==="sort")S.sort=v;else if(k==="fav")S.fav=!S.fav;else{const s=S[k];s.has(v)?s.delete(v):s.add(v)}home()},
   clr(){S.have.clear();home()},
@@ -464,9 +492,10 @@ function draw(){
 async function detail(id){
   const g=S.games.find(x=>x.id===id);if(!g){$("#app").innerHTML="<p>找不到這個遊戲，可能還在審核中或已被刪除。</p>";return}
   const views=await trackView("game",id,g);
-  const{data:cs}=await sb.from("comments").select("*,profiles!user_id(nickname)").eq("game_id",id).order("created_at");
+  const{data:comments}=await sb.from("comments").select("*,profiles!user_id(nickname)").eq("game_id",id).order("created_at");
+  const cs=comments||[];
   const mine=S.u&&g.author_id===S.u.id,B=(t,l)=>`<button data-a="g.toggle" data-t="${t}" data-id="${id}" class="${has(S[t],id)?"on":""}">${l}</button>`;
-  $("#app").innerHTML=`<p><a data-go="#/games">← 返回</a></p><h2 style="margin:0">${esc(g.title)}</h2>
+  $("#app").innerHTML=`<p>${canReview(g)?'<a href="#/admin">← 返回審核</a>':'<a href="#/games">← 返回遊戲列表</a>'}</p><h2 style="margin:0">${esc(g.title)}</h2>
   ${g.status!=="approved"?`<p class="rule">${g.status==="pending"?"審核中，目前只有你和管理員看得到。":"已被退回："+esc(g.reject_reason)+"。修改後可重新送審。"}</p>`:""}
   ${g.photos.length?`<div class="pics">${g.photos.map(p=>`<a href="${pub(p)}" target="_blank"><img loading="lazy" decoding="async" src="${pub(p)}" alt=""></a>`).join("")}</div>`:""}
   <p class="mu"><span class="t ag">${AGES[g.age]||"未指定年齡"}</span> 作者：<a data-go="#/games/by/${g.author_id}">${esc(nick(g))}</a> · ${cnt(S.played,id)} 個家庭玩過 · 瀏覽 ${views}</p>
@@ -477,7 +506,8 @@ async function detail(id){
   ${g.link?`<p><b>相關連結</b><br><a href="${esc(g.link)}" target="_blank" rel="noopener noreferrer nofollow ugc">${esc(lhost(g.link))} ↗</a> <span class="mu">（外部連結，請自行留意）</span></p>`:""}
   <div class="r">${B("likes",(has(S.likes,id)?"♥":"♡")+" 讚 "+cnt(S.likes,id))}${B("favs",(has(S.favs,id)?"★ 已收藏":"☆ 收藏")+" "+cnt(S.favs,id))}${B("played",(has(S.played,id)?"✓ 我們玩過了":"我們玩過了"))}<button data-a="g.share">分享連結</button><button data-a="g.report" data-k="game_id" data-id="${id}">檢舉</button>${mine?"":`<button data-a="g.report" data-k="target_user_id" data-id="${g.author_id}">檢舉作者</button>`}${mine?`<button data-a="g.edit" data-id="${id}">編輯</button>`:""}${mine||S.me?.is_admin?`<button class="d" data-a="g.delgame" data-id="${id}">刪除</button>`:""}</div>
   <h3>變化玩法與留言（${cs.length}）</h3>${cs.map(c=>`<div class="cm"><b>${esc(nick(c))}</b> <span class="mu">${new Date(c.created_at).toLocaleDateString("zh-TW")}</span><br>${esc(c.body).replace(/\n/g,"<br>")}<div class="mu"><a data-a="g.report" data-k="comment_id" data-id="${c.id}">檢舉</a>${S.u&&(c.user_id===S.u.id||S.me?.is_admin)?` · <a data-a="g.delcm" data-id="${c.id}">刪除</a>`:""}</div></div>`).join("")}
-  ${S.u?`<textarea id="cin" rows="3" maxlength="300" placeholder="分享你的變化玩法或心得（300 字內）"></textarea><button class="p" data-a="g.cm" data-id="${id}">送出留言</button>`:'<p class="mu">登入後即可按讚、收藏、留言。</p>'}`;
+  ${S.u?`<textarea id="cin" rows="3" maxlength="300" placeholder="分享你的變化玩法或心得（300 字內）"></textarea><button class="p" data-a="g.cm" data-id="${id}">送出留言</button>`:'<p class="mu">登入後即可按讚、收藏、留言。</p>'}
+  ${reviewActions("g",g,REASONS)}`;
 }
 function mini(g,extra=""){return `<div class="cm"><a data-go="#/games/g/${g.id}"><b>${esc(g.title)}</b></a> <span class="mu">${AGES[g.age]||"未指定年齡"} ${extra}</span></div>`}
 function author(id){
@@ -537,6 +567,7 @@ return{S,ensure,reset,show,openDraft:form,openNew:()=>act.new(),AGES,REASONS,nic
 const E=(()=>{
 let T=0;
 function route(){return ROUTE(true)}
+const ONLINE="線上活動";
 const CITIES=["基隆市","台北市","新北市","桃園市","新竹市","新竹縣","苗栗縣","台中市","彰化縣","南投縣","雲林縣","嘉義市","嘉義縣","台南市","高雄市","屏東縣","宜蘭縣","花蓮縣","台東縣","澎湖縣","金門縣","連江縣"];
 const REASONS=["內容含促銷或廣告文字","資訊不完整","地點資訊不當","疑似不實或詐騙","照片涉及隱私或著作權","重複投稿","不當內容"];
 const WK="日一二三四五六";
@@ -616,8 +647,8 @@ const ageKey=(min,max)=>min+"-"+max;
 const agePreset=(min,max)=>AGE_PRESETS.some(([,a,b])=>a===min&&b===max)?ageKey(min,max):"custom";
 const ageTxt=e=>AGE_PRESETS.find(([,a,b])=>a===e.age_min&&b===e.age_max)?.[0]||(e.age_min===e.age_max?e.age_min+" 歲":e.age_min+"–"+e.age_max+" 歲");
 const feeTxt=e=>e.fee?"NT$ "+e.fee:"免費";
-const nick=e=>e.profiles?.nickname||"主辦方";
-const orgTag=e=>isOrg(e)?'<span class="t org">商家／機構</span>':'<span class="t">個人</span>';
+const nick=e=>e.profiles?.nickname||(e.shared_organizer?"分享者":"主辦方");
+const orgTag=e=>e.shared_organizer?'<span class="t org">活動純分享</span>':isOrg(e)?'<span class="t org">商家／機構</span>':'<span class="t">個人</span>';
 async function load(){
   const[r,l,f]=await Promise.all([sb.from("events").select("*,profiles!author_id(nickname,account_type,bio,website)").order("start_at"),sb.from("event_likes").select("*"),sb.from("event_favs").select("*")]);
   if(r.error)alert("讀取資料失敗："+zh(r.error));
@@ -664,10 +695,10 @@ const act={
   edit(el){if(!need())return;const post=S.ev.find(x=>x.id===el.dataset.id&&x.author_id===AUTH.u.id);if(post)form(post)},
   async del(el){if(!confirm("確定刪除這個活動？"))return;const e=S.ev.find(x=>x.id===el.dataset.id);
     if(e.photo)await sb.storage.from("photos").remove([e.photo]);await sb.from("events").delete().eq("id",e.id);await load();afterDel("#/events")},
-  async approve(el){await sb.from("events").update({status:"approved",reject_reason:null}).eq("id",el.dataset.id);await load();route()},
-  async reject(el){if(!confirm("以「"+el.dataset.r+"」退回？照片也會刪除。"))return;const e=S.ev.find(x=>x.id===el.dataset.id);
-    if(e.photo)await sb.storage.from("photos").remove([e.photo]);
-    await sb.from("events").update({status:"rejected",reject_reason:el.dataset.r,photo:null}).eq("id",e.id);await load();route()},
+  approve(el){return reviewPost(el,"events",S.ev.find(e=>e.id===el.dataset.id),{status:"approved",reject_reason:null})},
+  reject(el){const e=S.ev.find(e=>e.id===el.dataset.id);
+    if(!canReview(e)||!confirm("以「"+el.dataset.r+"」退回？"+(e.photo?"照片也會刪除。":"")))return;
+    return reviewPost(el,"events",e,{status:"rejected",reject_reason:el.dataset.r,photo:null},e.photo?[e.photo]:[])},
   async delrep(el){await sb.from("reports").delete().eq("id",el.dataset.id);route()},
   async sus(el){if(!confirm("確定停權這位主辦方？其公開內容會被隱藏，也無法再投稿或留言。"))return;
     const{error}=await sb.from("profiles").update({suspended:true}).eq("id",el.dataset.id);if(error)return alert(zh(error));await load();route()},
@@ -694,10 +725,10 @@ function list(){
     if(S.city.size&&!S.city.has(e.city))return false;
     if(S.age.size&&![...S.age].some(i=>{const band=EVENT_AGES[+i];return band&&e.age_min<=band[2]&&e.age_max>=band[1]}))return false;
     if(S.fee.size&&![...S.fee].some(f=>f==="free"?e.fee===0:f==="paid"?e.fee>0:e.fee<=+f))return false;
-    if(S.org.size&&!S.org.has(e.profiles?.account_type||"personal"))return false;
+    if(S.org.size&&!S.org.has(e.shared_organizer?"shared":e.profiles?.account_type||"personal"))return false;
     if(S.aud.size&&!S.aud.has(e.audience))return false;
     if(S.booking.size&&!e.flex_time)return false;
-    return matches(S.q,[e.title,e.description,e.venue,e.address,e.district,e.city,nick(e)]);
+    return matches(S.q,[e.title,e.description,e.venue,e.address,e.district,e.city,nick(e),e.shared_organizer,e.shared_organizer?"活動純分享":""]);
   }).map(e=>({event:e,slots:filteredSlots(e,now,today)})).filter(row=>row.slots.length)
     .sort((a,b)=>a.slots[0].d.localeCompare(b.slots[0].d)||a.slots[0].s.localeCompare(b.slots[0].s));
 }
@@ -718,7 +749,7 @@ function ecard(e,slots=upcomingSlots(e)){
       ${slots.length>2?`<li>另有 ${slots.length-2} 場，詳見活動頁</li>`:""}</ul>`;
   const venue=[e.city+(e.district||""),e.venue].filter(Boolean).join(" · ");
   return `<article class="ev event-card" data-go="${path}"><div class="dt"><b>${md(date)}</b><span>週${WK[date.getDay()]}</span></div>
-    <div class="eb"><a class="event-title" href="${path}">${esc(e.title)}</a><div class="mu">主辦：${esc(nick(e))}</div>
+    <div class="eb"><a class="event-title" href="${path}">${esc(e.title)}</a><div class="mu">主辦：${esc(e.shared_organizer||nick(e))}</div>
     ${times}<div class="mu event-place">${esc(venue)}</div>
     <div><span class="t ag">${ageTxt(e)}</span><span class="t">${AUD[e.audience]||"親子"}</span><span class="t ${e.fee?"":"ok"}">${feeTxt(e)}</span>${orgTag(e)}</div>
     <div class="mu">♥ ${cntE(S.elikes,e.id)} · ★ ${cntE(S.efavs,e.id)} · 瀏覽 ${Number(e.view_count||0)}</div>
@@ -727,17 +758,17 @@ function ecard(e,slots=upcomingSlots(e)){
 }
 function home(){
   const grp=(k,arr)=>arr.map(([v,t])=>`<button data-a="e.ft" data-k="${k}" data-v="${v}" aria-pressed="${S[k].has(String(v))}" class="${S[k].has(String(v))?"on":""}">${t}</button>`).join("");
-  $("#app").innerHTML=`<div class="section-head hrow"><h2>親子活動日曆</h2><button class="p" data-a="e.new">＋ 分享活動</button></div><p class="mu" style="margin:-4px 8px 12px">查看近期活動，依地點、年齡、費用與時間篩選。活動資訊由主辦方提供，請以主辦方公告為準。</p>
+  $("#app").innerHTML=`<div class="section-head hrow"><h2>親子活動日曆</h2><button class="p" data-a="e.new">＋ 分享活動</button></div><p class="mu" style="margin:-4px 8px 12px">查看近期活動，依地點、年齡、費用與時間篩選。報名與活動詳情請以主辦方公告為準。</p>
   <div class="filter-panel"><div class="search-wrap"><input id="q" type="search" aria-label="搜尋活動" placeholder="搜尋活動名稱、說明或地點…" value="${esc(S.q)}"></div>
   <div class="filter-label">快速找活動（可複選）</div><div class="filter-row">${grp("when",[["today","今天"],["weekend","本週末"],["7d","7 天內"],["month","本月"]])}<button data-a="e.favonly" aria-pressed="${S.favOnly}" class="${S.favOnly?"on":""}">只看我的收藏</button></div>
   <div class="filter-label">時段（可複選）</div><div class="filter-row">${grp("tod",[["am","早上"],["pm","下午"],["ev","晚上"]])}</div>
   <details class="browse-filters" ${S.advOpen?"open":""}><summary>更多篩選</summary><div class="browse-content">
   <div class="filter-label">預約方式</div><div class="filter-row">${grp("booking",[["flex","可自行預約"]])}</div>
-  <div class="filter-label">縣市</div><div class="filter-row">${grp("city",CITIES.map(c=>[c,c]))}</div>
+  <div class="filter-label">活動地點</div><div class="filter-row">${grp("city",[ONLINE,...CITIES].map(c=>[c,c]))}</div>
   <div class="filter-label">孩子年齡</div><div class="filter-row">${grp("age",EVENT_AGES.map(([label],i)=>[i,label]))}</div>
   <div class="filter-label">費用</div><div class="filter-row">${grp("fee",[["free","免費"],["500","500 元以內"],["1000","1000 元以內"],["paid","付費"]])}</div>
   <div class="filter-label">參與對象</div><div class="filter-row">${grp("aud",[["family","親子"],["kids","只有孩子"],["parents","只有家長"]])}</div>
-  <div class="filter-label">主辦方</div><div class="filter-row">${grp("org",[["personal","個人"],["organization","商家／機構"]])}</div></div></details>
+  <div class="filter-label">活動來源</div><div class="filter-row">${grp("org",[["personal","個人主辦"],["organization","商家／機構主辦"],["shared","活動純分享"]])}</div></div></details>
   <div class="filter-actions"><span class="filter-count" id="fcount" aria-live="polite"></span><button data-a="e.clr">清除所有篩選</button></div><div class="filter-chips" id="active-event-filters"></div></div>
   <div class="section-head"><div><h2 id="lt"></h2><p>選擇活動卡片可查看完整資訊與主辦方連結。</p></div></div>
   <div class="r"><button data-a="e.sort" data-v="soon">即將到來</button><button data-a="e.sort" data-v="new">最新活動</button></div><div id="el"></div>
@@ -757,7 +788,7 @@ function draw(){
   });
   if($(".calendar-panel").open)$("#cal").innerHTML=cal(base);
   $("#fcount").textContent=`找到 ${l.length} 筆活動`+(S.day?" · 已選日期":"");
-  const active=[],labels={today:"今天",weekend:"本週末","7d":"7 天內",month:"本月",am:"早上",pm:"下午",ev:"晚上",free:"免費",paid:"付費",family:"親子",kids:"只有孩子",parents:"只有家長",personal:"個人主辦",organization:"商家／機構",flex:"可自行預約"};for(const k of ["when","city","age","fee","org","aud","tod","booking"])for(const v of S[k])active.push(k==="city"?v:k==="age"?(EVENT_AGES[+v]?.[0]||v):(labels[v]||v));if(S.favOnly)active.push("只看收藏");if(S.q.trim())active.push("搜尋："+S.q.trim());
+  const active=[],labels={today:"今天",weekend:"本週末","7d":"7 天內",month:"本月",am:"早上",pm:"下午",ev:"晚上",free:"免費",paid:"付費",family:"親子",kids:"只有孩子",parents:"只有家長",personal:"個人主辦",organization:"商家／機構主辦",shared:"活動純分享",flex:"可自行預約"};for(const k of ["when","city","age","fee","org","aud","tod","booking"])for(const v of S[k])active.push(k==="city"?v:k==="age"?(EVENT_AGES[+v]?.[0]||v):(labels[v]||v));if(S.favOnly)active.push("只看收藏");if(S.q.trim())active.push("搜尋："+S.q.trim());
   const chipBox=document.querySelector("#active-event-filters");if(chipBox)chipBox.innerHTML=active.map(x=>`<span>${esc(x)}</span>`).join("");
   $("#lt").textContent=S.day?S.day.replace(/-/g,"/")+" 的活動（"+l.length+"）":(S.sort==="new"?"最新活動":"近期活動")+"（"+l.length+"）";
   $("#el").innerHTML=(S.day?'<button data-a="e.day" data-k="">顯示全部日期</button>':"")+(l.map(({event,slots})=>ecard(event,slots)).join("")||`<div class="empty-state"><strong>${active.length||S.day?"找不到符合條件的活動":"目前沒有即將舉辦的活動"}</strong>
@@ -769,18 +800,19 @@ async function detail(id){
   if(!e){$("#app").innerHTML='<p><a data-go="#/events">← 返回</a></p><p>找不到這個活動，可能已結束、還在審核中或已被刪除。</p>';return}
   const views=await trackView("event",id,e);
   const mine=S.u&&e.author_id===S.u.id,adm=S.me?.is_admin,place=[e.city+(e.district||""),e.venue,e.address].filter(Boolean).join(" ");
-  $("#app").innerHTML=`<p><a data-go="#/events">← 返回活動列表</a></p><div class="card-box"><h2 style="margin:0 0 8px">${esc(e.title)}</h2>
+  $("#app").innerHTML=`<p>${canReview(e)?'<a href="#/admin">← 返回審核</a>':'<a href="#/events">← 返回活動列表</a>'}</p><div class="card-box"><h2 style="margin:0 0 8px">${esc(e.title)}</h2>
   ${e.status!=="approved"?`<p class="rule">${e.status==="pending"?"審核中，目前只有你和管理員看得到。":"已被退回："+esc(e.reject_reason)+"。修改後可重新送審。"}</p>`:""}
   <div>${orgTag(e)}<span class="t ag">${ageTxt(e)}</span><span class="t">${AUD[e.audience]||"親子"}</span><span class="t ${e.fee?"":"ok"}">${feeTxt(e)}</span></div>
   ${e.photo?`<img class="big" decoding="async" src="${pub(e.photo)}" alt="" style="max-width:460px">`:""}
   <p><b>時間（台灣時間）</b><br>${dayLines(e)}</p>
-  <p><b>地點</b><br>${esc(place)} <a href="${e.map_link?esc(e.map_link):"https://www.google.com/maps/search/?api=1&amp;query="+encodeURIComponent(place)}" target="_blank" rel="noopener noreferrer${e.map_link?" nofollow ugc":""}">地圖 ↗</a></p>
+  <p><b>地點</b><br>${esc(place)}${e.city===ONLINE?"":` <a href="${e.map_link?esc(e.map_link):"https://www.google.com/maps/search/?api=1&amp;query="+encodeURIComponent(place)}" target="_blank" rel="noopener noreferrer${e.map_link?" nofollow ugc":""}">地圖 ↗</a>`}</p>
   <p><b>費用</b><br>${feeTxt(e)}${e.fee_note?"（"+esc(e.fee_note)+"）":""}</p>
   <p><b>活動說明</b><br>${esc(e.description).replace(/\n/g,"<br>")}</p>
-  <p><b>主辦方</b>：${isOrg(e)?`<a data-go="#/events/org/${e.author_id}">${esc(nick(e))}</a> <span class="mu">（查看簡介與其他活動）</span>`:esc(nick(e))}</p>
-  ${e.link?`<p><a class="b" style="text-decoration:none;display:inline-block" href="${esc(e.link)}" target="_blank" rel="noopener noreferrer nofollow ugc">${e.flex_time?"前往主辦方預約":"前往報名／詳情"} ↗</a> <span class="mu">（外部連結，請自行留意）</span></p>`:""}
-  <div class="r"><button data-a="e.toggle" data-t="event_likes" data-id="${id}" class="${hasE(S.elikes,id)?"on":""}">${hasE(S.elikes,id)?"♥":"♡"} 讚 ${cntE(S.elikes,id)}</button><button data-a="e.toggle" data-t="event_favs" data-id="${id}" class="${hasE(S.efavs,id)?"on":""}">${hasE(S.efavs,id)?"★ 已收藏":"☆ 收藏"} ${cntE(S.efavs,id)}</button><button data-a="e.share">分享連結</button><button data-a="e.report" data-k="event_id" data-id="${id}">檢舉活動</button>${mine?"":`<button data-a="e.report" data-k="target_user_id" data-id="${e.author_id}">檢舉主辦方</button>`}${mine?`<button data-a="e.edit" data-id="${id}">編輯</button>`:""}${mine||adm?`<button class="d" data-a="e.del" data-id="${id}">刪除</button>`:""}</div>
-  <p class="mu">瀏覽 ${views} 次。活動資訊由主辦方提供，本站不代收報名與費用。日期、地點與費用可能變更，請以主辦方公告為準，並請自行評估孩子的安全。</p></div>`;
+  ${e.shared_organizer?`<p><b>主辦方</b>：${esc(e.shared_organizer)}<br><b>分享者</b>：${esc(nick(e))}</p><p class="rule">此活動僅供資訊分享，報名與活動詳情請洽主辦方。</p>`:`<p><b>主辦方</b>：${isOrg(e)?`<a data-go="#/events/org/${e.author_id}">${esc(nick(e))}</a> <span class="mu">（查看簡介與其他活動）</span>`:esc(nick(e))}</p>`}
+  ${e.link?`<p><a class="b" style="text-decoration:none;display:inline-block" href="${esc(e.link)}" target="_blank" rel="noopener noreferrer nofollow ugc">${e.shared_organizer?"查看主辦方公告":e.flex_time?"前往主辦方預約":"前往報名／詳情"} ↗</a> <span class="mu">（外部連結，請自行留意）</span></p>`:""}
+  <div class="r"><button data-a="e.toggle" data-t="event_likes" data-id="${id}" class="${hasE(S.elikes,id)?"on":""}">${hasE(S.elikes,id)?"♥":"♡"} 讚 ${cntE(S.elikes,id)}</button><button data-a="e.toggle" data-t="event_favs" data-id="${id}" class="${hasE(S.efavs,id)?"on":""}">${hasE(S.efavs,id)?"★ 已收藏":"☆ 收藏"} ${cntE(S.efavs,id)}</button><button data-a="e.share">分享連結</button><button data-a="e.report" data-k="event_id" data-id="${id}">檢舉活動</button>${mine?"":`<button data-a="e.report" data-k="target_user_id" data-id="${e.author_id}">${e.shared_organizer?"檢舉分享者":"檢舉主辦方"}</button>`}${mine?`<button data-a="e.edit" data-id="${id}">編輯</button>`:""}${mine||adm?`<button class="d" data-a="e.del" data-id="${id}">刪除</button>`:""}</div>
+  <p class="mu">瀏覽 ${views} 次。本站不代收報名與費用。日期、地點與費用可能變更，請以主辦方公告為準，並請自行評估孩子的安全。</p></div>
+  ${reviewActions("e",e,REASONS)}`;
 }
 let FD=[],FS=[];
 const tps=(id,t)=>{const[h,m]=(t||"").split(":");return `<div class="tp"><select id="${id}h"><option value="">時</option>${Array.from({length:24},(_,i)=>{const x=String(i).padStart(2,"0");return `<option value="${x}" ${h===x?"selected":""}>${x}</option>`}).join("")}</select><span>:</span><input id="${id}m" list="mins" inputmode="numeric" maxlength="2" placeholder="分" value="${esc(m||"")}"></div>`};
@@ -802,11 +834,14 @@ function form(e,draft){
   const tp=(id,d)=>`<div class="tp"><select id="${id}h"><option value="">時</option>${Array.from({length:24},(_,i)=>{const h=String(i).padStart(2,"0");return `<option value="${h}" ${d&&d.getHours()===i?"selected":""}>${h}</option>`}).join("")}</select><span>:</span><input id="${id}m" list="mins" inputmode="numeric" maxlength="2" placeholder="分" value="${d?String(d.getMinutes()).padStart(2,"0"):""}"></div>`;
   const ages=s=>Array.from({length:13},(_,i)=>`<option value="${i}" ${s===i?"selected":""}>${i} 歲</option>`).join("");
   modal(`<div data-draft-form="event"><h3 style="margin-top:0">${e?"編輯活動":"分享一個活動"}</h3>
-  <details class="rule posting-rules"><summary>活動投稿規則</summary><ul><li>僅分享活動資訊：不接受折扣促銷、團購、業配、抽獎集客等文字</li><li>請完整填寫日期時間、地點、適合年齡與費用（含材料費），費用須誠實標示</li><li>本站不代收報名與費用，請提供主辦方的報名或詳情連結${org?"（商家／機構必填）":""}</li><li>${org?"商家／機構請填寫完整地址":"個人舉辦的活動只公開到縣市與區，請勿填住家地址，並盡量使用公共場地"}</li><li>活動說明 800 字內，照片 1 張（8 MB 內，會自動壓縮），請遵守隱私及著作權</li><li>活動結束後會自動從日曆隱藏；送出後需經審核才會公開，編輯後也會重新審核</li></ul></details>
+  <details class="rule posting-rules"><summary>活動投稿規則</summary><ul><li>僅分享活動資訊：不接受折扣促銷、團購、業配、抽獎集客等文字</li><li>請填寫活動日期、時間、參加方式、適合年齡與費用（含材料費）</li><li>轉貼活動請使用公開的官方公告或報名連結，並標明主辦方</li><li>${org?"實體活動請填寫公開的活動地址":"個人帳號請使用公開場地，勿填寫住家地址"}</li><li>活動說明 800 字內，照片 1 張（8 MB 內，會自動壓縮），請遵守隱私及著作權</li><li>活動結束後會自動從日曆隱藏；送出後需經審核才會公開，編輯後也會重新審核</li></ul></details>
   ${postSteps(["活動與場次","地點與參與資訊","照片與送審"])}
   <section class="post-step"><h4 tabindex="-1">活動與場次</h4>
+  <div class="r"><label>活動來源<select id="event-source"><option value="hosted">自己主辦</option><option value="shared" ${e?.shared_organizer?"selected":""}>轉貼活動（活動純分享）</option></select></label>
+  <label>活動形式<select id="event-format"><option value="in-person">實體活動</option><option value="online" ${e?.city===ONLINE?"selected":""}>線上活動</option></select></label></div>
+  <div id="event-shared-fields" hidden><p class="rule">此活動僅供資訊分享，報名與活動詳情請洽主辦方。</p><label>主辦方名稱（必填）<input id="event-organizer" maxlength="100" value="${esc(e?.shared_organizer)}"></label></div>
   <label>活動主題（20 字內）<input id="event-ft" maxlength="20" value="${esc(e?.title)}"></label>
-  <div class="filter-label" style="margin-top:4px">活動類型</div>
+  <div class="filter-label" style="margin-top:4px">活動日期安排</div>
   <div class="r">${[["single","單日活動"],["dates","多日活動（指定幾天）"],["range","連續多日（連續幾天）"],["sched","多場次（分別設定時間）"]].map(([v,t])=>`<label class="kopt"><input type="radio" name="event-fk" value="${v}" ${kind===v?"checked":""} onchange="kindUI()">${t}</label>`).join("")}</div>
   <p class="mu" id="khint" style="margin:0 0 10px"></p>
   <div id="k_single"><label>活動日期<input id="event-fd1" type="date" value="${kind==="single"&&st?ymd(st):""}"></label></div>
@@ -820,10 +855,10 @@ function form(e,draft){
   </div>
   <datalist id="mins"><option value="00"><option value="15"><option value="30"><option value="45"></datalist>
   </section><section class="post-step" hidden><h4 tabindex="-1">地點與參與資訊</h4>
-  <div class="r"><label>縣市<select id="event-fc" onchange="fillDist()"><option value="">請選擇縣市</option>${CITIES.map(c=>`<option ${e?.city===c?"selected":""}>${c}</option>`).join("")}</select></label><label>區／鄉鎮（選填）<select id="event-fz"></select></label></div>
+  <div id="event-place"><div class="r"><label>縣市<select id="event-fc" onchange="fillDist()"><option value="">請選擇縣市</option>${CITIES.map(c=>`<option ${e?.city===c?"selected":""}>${c}</option>`).join("")}</select></label><label>區／鄉鎮（選填）<select id="event-fz"></select></label></div>
   <label>活動地點<input id="event-fv" maxlength="60" placeholder="例如：場館或店家名稱" value="${esc(e?.venue)}"></label>
   ${org?`<label>完整地址<input id="event-fad" maxlength="100" value="${esc(e?.address)}"></label>`:""}
-  <label>地圖連結（選填，例如 Google 地圖的分享連結）<input id="event-fmp" type="url" maxlength="300" placeholder="https://" value="${esc(e?.map_link)}"></label>
+  <label>地圖連結（選填，例如 Google 地圖的分享連結）<input id="event-fmp" type="url" maxlength="300" placeholder="https://" value="${esc(e?.map_link)}"></label></div>
   <label>適合年齡<select id="event-age-preset">${AGE_PRESETS.map(([label,min,max])=>
     `<option value="${ageKey(min,max)}" ${agePreset(e?.age_min??0,e?.age_max??12)===ageKey(min,max)?"selected":""}>${label}</option>`).join("")}
     <option value="custom" ${e&&agePreset(e.age_min,e.age_max)==="custom"?"selected":""}>自訂年齡範圍</option></select></label>
@@ -831,16 +866,25 @@ function form(e,draft){
   <label>參與對象<select id="event-fau"><option value="family" ${!e||e.audience==="family"?"selected":""}>親子（家長與孩子一起）</option><option value="kids" ${e&&e.audience==="kids"?"selected":""}>只有孩子（家長不需陪同）</option><option value="parents" ${e&&e.audience==="parents"?"selected":""}>只有家長（例如講座）</option></select></label>
   <div class="r"><label>費用（元，免費填 0）<input id="event-ff" type="number" min="0" max="100000" value="${e?e.fee:0}"></label><label>費用說明（選填，例如：含材料費）<input id="event-fn" maxlength="60" value="${esc(e?.fee_note)}"></label></div>
   <label>活動說明<textarea id="event-fh" rows="6" maxlength="800">${esc(e?.description)}</textarea></label>
-  <label>${org?"報名或詳情連結（必填）":"報名或詳情連結（選填）"}<input id="event-fl" type="url" maxlength="200" placeholder="https://" value="${esc(e?.link)}"></label>
+  <label><span id="event-link-label"></span><input id="event-fl" type="url" maxlength="200" placeholder="https://" value="${esc(e?.link)}"></label>
   </section><section class="post-step" hidden><h4 tabindex="-1">照片與送審</h4><p class="post-preview"></p>
   <label>活動照片（選填，1 張${e?"；不選就保留原圖":""}）<input id="event-fp" type="file" accept="image/*"></label>
   </section>${postActions("event",e?"儲存並重新送審":"送出審核")}</div>`);
   const val=id=>$("#event-"+id)?.value.trim()||"";
   const ageMode=$("#event-age-preset"),file=()=>$("#event-fp").files[0];
   const showAges=()=>{$("#event-custom-ages").hidden=ageMode.value!=="custom"};
+  const online=()=>val("format")==="online",shared=()=>val("source")==="shared";
+  const showOptions=()=>{
+    $("#event-place").hidden=online();
+    $("#event-shared-fields").hidden=!shared();
+    $("#event-organizer").required=shared();
+    $("#event-fl").required=shared()||online()||org;
+    $("#event-link-label").textContent=shared()?"主辦方的官方公告或報名連結（必填）":online()?"線上參加方式或報名連結（必填）":`報名或詳情連結（${org?"必填":"選填"}）`;
+  };
   const bounds=()=>ageMode.value==="custom"?[+val("fa1"),+val("fa2")]:ageMode.value.split("-").map(Number);
   ageMode.onchange=showAges;
-  fillDist(e?.district);kindUI();drawChips();drawSch();showAges();
+  $("#event-format").onchange=$("#event-source").onchange=showOptions;
+  fillDist(e?.district);kindUI();drawChips();drawSch();showAges();showOptions();
   bindDraft("event",e,draft,{
     extra:()=>({FD,FS}),
     beforeRestore(old){
@@ -851,37 +895,40 @@ function form(e,draft){
     afterRestore(old){
       fillDist(old.fields.find(x=>x.id==="event-fz")?.value);
       if(!old.fields.some(x=>x.id==="event-age-preset"))ageMode.value=agePreset(+val("fa1"),+val("fa2"));
-      kindUI();showAges();
+      kindUI();showAges();showOptions();
     },
     wizard:{
       validate(step){
         if(step===0){
           if(!val("ft"))return "請填寫活動主題。";
+          if(shared()&&!val("organizer"))return "請填寫這場活動的主辦方名稱。";
           return readTiming(!!e).error;
         }
         if(step===1){
-          if(!val("fc"))return "請選擇縣市。";
-          if(org&&!val("fad"))return "商家／機構需填寫完整地址。";
+          if(!online()&&!val("fc"))return "請選擇縣市。";
+          if(!online()&&org&&!val("fad"))return "商家／機構需填寫完整地址。";
           const [min,max]=bounds(),fee=+val("ff"),link=val("fl"),map=val("fmp");
           if(!Number.isInteger(min)||!Number.isInteger(max)||min<0||max>12||max<min)return "請確認適合年齡的範圍。";
           if(!val("ff")||!Number.isInteger(fee)||fee<0||fee>100000)return "費用請填 0 到 100000 之間的整數。";
           if(!val("fh"))return "請填寫活動說明。";
+          if(shared()&&!link)return "請提供主辦方的官方公告或報名連結。";
+          if(online()&&!link)return "請提供線上參加方式或報名連結。";
           if(org&&!link)return "商家／機構需提供報名或詳情連結。";
           if(link&&!/^https?:\/\/[^\s]+$/i.test(link))return "連結需以 http:// 或 https:// 開頭。";
-          if(map&&!/^https?:\/\/[^\s]+$/i.test(map))return "地圖連結需以 http:// 或 https:// 開頭。";
+          if(!online()&&map&&!/^https?:\/\/[^\s]+$/i.test(map))return "地圖連結需以 http:// 或 https:// 開頭。";
         }
         if(step===2&&file()?.size>8*1024*1024)return "照片超過 8 MB。";
       },
       preview(box){
         const [age_min,age_max]=bounds(),timing=readTiming(!!e);
-        box.textContent=[val("ft"),timing.row?tRange(timing.row):"",val("fc")+val("fz"),ageTxt({age_min,age_max}),feeTxt({fee:+val("ff")})].filter(Boolean).join(" · ");
+        box.textContent=[val("ft"),timing.row?tRange(timing.row):"",online()?ONLINE:val("fc")+val("fz"),shared()?"活動純分享｜主辦方："+val("organizer"):"自己主辦",ageTxt({age_min,age_max}),feeTxt({fee:+val("ff")})].filter(Boolean).join(" · ");
       },
       async submit(ctx){
         const [age_min,age_max]=bounds(),timing=readTiming(!!e);
         if(!timing.row)throw new Error(timing.error);
-        const row={...timing.row,title:val("ft"),description:val("fh"),city:val("fc"),district:val("fz")||null,
-          venue:val("fv")||null,address:org?val("fad"):null,age_min,age_max,fee:+val("ff"),fee_note:val("fn")||null,
-          link:val("fl")||null,map_link:val("fmp")||null,audience:val("fau")};
+        const row={...timing.row,title:val("ft"),description:val("fh"),city:online()?ONLINE:val("fc"),district:online()?null:val("fz")||null,
+          venue:online()?null:val("fv")||null,address:!online()&&org?val("fad"):null,age_min,age_max,fee:+val("ff"),fee_note:val("fn")||null,
+          shared_organizer:shared()?val("organizer"):null,link:val("fl")||null,map_link:online()?null:val("fmp")||null,audience:val("fau")};
         await savePost(ctx,"events",row,file()?[file()]:[],e?.photo?[e.photo]:[],photos=>({photo:photos[0]||null}));
         T=0;
       }
@@ -898,7 +945,7 @@ function readTiming(editing){
   const k=document.querySelector("[name=event-fk]:checked")?.value;
   const val=id=>$("#event-"+id).value;
   const fail=error=>({error});
-  if(!k)return fail("請先選擇活動類型。");
+  if(!k)return fail("請先選擇活動日期安排。");
   const continuous=k==="range"&&$("#event-fcont").checked;
   const flex_time=k!=="sched"&&!continuous&&$("#event-fx").checked;
   let start=k==="sched"?"":flex_time?"00:00":tv("event-fs1");
@@ -942,7 +989,7 @@ function readTiming(editing){
 async function org(id){
   const{data:p}=await sb.from("profiles").select("id,nickname,account_type,bio,website,suspended").eq("id",id).maybeSingle();
   if(!p||p.account_type!=="organization"||p.suspended){$("#app").innerHTML='<p><a data-go="#/events">← 返回活動列表</a></p><p>找不到這個主辦方。</p>';return}
-  const now=new Date(),l=S.ev.filter(e=>e.author_id===id&&e.status==="approved"&&upcomingSlots(e,now).length).sort((a,b)=>nextEventDate(a)-nextEventDate(b));
+  const now=new Date(),l=S.ev.filter(e=>e.author_id===id&&!e.shared_organizer&&e.status==="approved"&&upcomingSlots(e,now).length).sort((a,b)=>nextEventDate(a)-nextEventDate(b));
   $("#app").innerHTML=`<p><a data-go="#/events">← 返回活動列表</a></p><div class="card-box"><h2 style="margin:0 0 8px">${esc(p.nickname)} <span class="t org">商家／機構</span></h2>${p.bio?`<p>${esc(p.bio).replace(/\n/g,"<br>")}</p>`:'<p class="mu">這個主辦方還沒有填寫簡介。</p>'}${p.website?`<p class="mu">官方網站：<a href="${esc(p.website)}" target="_blank" rel="noopener noreferrer nofollow ugc">${esc(lhost(p.website))} ↗</a></p>`:""}<div class="r"><button data-a="e.report" data-k="target_user_id" data-id="${id}">檢舉這個主辦方</button></div></div>
   <div class="section-head"><div><h2>舉辦的活動（${l.length}）</h2></div></div>${l.map(e=>ecard(e)).join("")||'<p class="mu">目前沒有進行中的活動。</p>'}`;
 }
@@ -995,9 +1042,9 @@ async function homePage(){
 <a class="pick a" href="#/events"><div class="eyebrow">EVENTS</div><h2>找親子活動</h2><p>查看近期活動日曆，依地點、孩子年齡、費用與時間篩選。</p><span class="go">看活動日曆 →</span></a>
 <a class="pick b2" href="#/games"><div class="eyebrow">GAMES</div><h2>找遊戲</h2><p>在家就能玩的親子遊戲點子，依孩子年齡和現有材料來找。</p><span class="go">找遊戲點子 →</span></a>
 </div>
-<section class="home-feed"><div class="home-feed-head"><h3>最新遊戲分享</h3><a href="#/games">瀏覽全部遊戲 →</a></div>${gameHtml}</section>
 <section class="home-feed"><div class="home-feed-head"><h3>近期親子活動</h3><a href="#/events">查看活動日曆 →</a></div>${eventHtml}</section>
-<div class="share"><h3>一起分享，讓更多家庭找到好點子</h3><p>家長可以分享居家遊戲，店家與機構可以分享親子活動資訊。本站僅提供資訊分享，不代收報名與費用。</p><div class="share-actions"><a class="primary" href="#/share-event">分享活動</a><a href="#/share-game">分享遊戲</a></div></div>`;
+<section class="home-feed"><div class="home-feed-head"><h3>最新遊戲分享</h3><a href="#/games">瀏覽全部遊戲 →</a></div>${gameHtml}</section>
+<div class="share"><h3>一起分享，讓更多家庭找到好點子</h3><p>你可以刊登自己主辦的活動、轉貼公開親子活動，或分享居家遊戲。本站不代收報名與費用。</p><div class="share-actions"><a class="primary" href="#/share-event">分享活動</a><a href="#/share-game">分享遊戲</a></div></div>`;
 }
 const ACC={tab:"posts",open:{}},ADM={open:{}};
 const secOf=(st,k,t,n,body)=>`<details class="sec" data-k="${k}" ${st[k]!==false?"open":""}><summary><h3>${t}（${n}）</h3></summary>${body}</details>`;
@@ -1035,9 +1082,9 @@ async function adminPage(){
   const{data:rp}=await sb.from("reports").select("*,games!game_id(title),comments!comment_id(body,game_id),events!event_id(title),target:profiles!target_user_id(id,nickname,suspended)").order("created_at");
   const{data:sp}=await sb.from("profiles").select("id,nickname").eq("suspended",true);
   const{data:rb}=await sb.from("profiles").select("id,nickname,bio,website,bio_updated_at").not("bio_updated_at","is",null).gte("bio_updated_at",new Date(Date.now()-14*864e5).toISOString()).order("bio_updated_at",{ascending:false});
-  const{AGES,REASONS:GR,nick:gn}=G,{REASONS:ER,nick:en,tRange,ageTxt,feeTxt,AUD,isOrg,orgTag}=E;
-  const gItem=g=>`<div class="cm"><a data-go="#/games/g/${g.id}"><b>${esc(g.title)}</b></a> <span class="mu">${esc(gn(g))} · ${AGES[g.age]||"未指定年齡"}</span><div class="r">${g.photos.map(x=>`<img src="${pub(x)}" alt="" width="90">`).join("")}</div><p>${esc(g.how)}</p>${g.link?`<p class="mu">連結：<a href="${esc(g.link)}" target="_blank" rel="noopener noreferrer nofollow">${esc(g.link)}</a></p>`:""}<div class="r"><button class="p" data-a="g.approve" data-id="${g.id}">核准</button>退回：${GR.map(r=>`<button class="d" data-a="g.reject" data-id="${g.id}" data-r="${r}">${r}</button>`).join("")}</div></div>`;
-  const eItem=e=>`<div class="cm"><a data-go="#/events/e/${e.id}"><b>${esc(e.title)}</b></a> ${orgTag(e)} <span class="mu">${esc(en(e))} · ${tRange(e)} · ${esc(e.city)}${esc(e.district||"")} · ${ageTxt(e)} · ${feeTxt(e)}</span>${e.photo?`<div class="r"><img src="${pub(e.photo)}" alt="" width="120"></div>`:""}<p>${esc(e.description)}</p>${isOrg(e)&&e.profiles?.bio?`<p class="mu">主辦方簡介：${esc(e.profiles.bio)}${e.profiles.website?"｜"+esc(e.profiles.website):""}</p>`:""}<p class="mu">對象：${AUD[e.audience]||"親子"}${e.flex_time?"｜無特定時間／可自行預約":""}</p>${e.link?`<p class="mu">連結：<a href="${esc(e.link)}" target="_blank" rel="noopener noreferrer nofollow">${esc(e.link)}</a></p>`:""}${e.address?`<p class="mu">地址：${esc(e.address)}</p>`:""}${e.map_link?`<p class="mu">地圖連結：<a href="${esc(e.map_link)}" target="_blank" rel="noopener noreferrer nofollow">${esc(e.map_link)}</a></p>`:""}<div class="r"><button class="p" data-a="e.approve" data-id="${e.id}">核准</button>退回：${ER.map(r=>`<button class="d" data-a="e.reject" data-id="${e.id}" data-r="${r}">${r}</button>`).join("")}</div></div>`;
+  const {AGES,nick:gn}=G,{nick:en,tRange,orgTag}=E;
+  const gItem=g=>`<div class="cm"><a class="b" href="#/games/g/${g.id}"><b>${esc(g.title)} →</b></a> <span class="mu">${esc(gn(g))} · ${AGES[g.age]||"未指定年齡"}</span></div>`;
+  const eItem=e=>`<div class="cm"><a class="b" href="#/events/e/${e.id}"><b>${esc(e.title)} →</b></a> ${orgTag(e)} <span class="mu">${esc(en(e))} · ${tRange(e)} · ${esc(e.city)}${esc(e.district||"")}</span></div>`;
   const rItem=r=>`<div class="cm">${r.game_id?`<a data-go="#/games/g/${r.game_id}">遊戲：${esc(r.games?.title)}</a>`:r.comment_id?`留言：${esc(r.comments?.body)}${r.comments?.game_id?` <a data-go="#/games/g/${r.comments.game_id}">前往遊戲</a>`:""}`:r.event_id?`<a data-go="#/events/e/${r.event_id}">活動：${esc(r.events?.title)}</a>`:`作者／主辦方：${esc(r.target?.nickname)}${r.target?.suspended?"（已停權）":""} <a data-a="${r.target?.suspended?"x.unsus":"x.sus"}" data-id="${r.target_user_id}">${r.target?.suspended?"解除停權":"停權"}</a>`}<br>原因：${esc(r.reason)} <a data-a="x.delrep" data-id="${r.id}">忽略此檢舉</a></div>`;
   const bItem=u=>`<div class="cm"><a data-go="#/events/org/${u.id}"><b>${esc(u.nickname)}</b></a> <span class="mu">${new Date(u.bio_updated_at).toLocaleDateString("zh-TW")}</span><p style="margin:4px 0 0">${esc(u.bio)}${u.website?" ｜ "+esc(u.website):""}</p></div>`;
   $("#app").innerHTML=`<h2 style="margin:6px 8px 12px">審核</h2>${secOf(ADM.open,"ag","待審核遊戲",gp.length,gp.map(gItem).join("")||'<p class="mu">沒有待審核的遊戲。</p>')}${secOf(ADM.open,"ae","待審核活動",ep.length,ep.map(eItem).join("")||'<p class="mu">沒有待審核的活動。</p>')}${secOf(ADM.open,"ar","檢舉",rp?.length||0,(rp||[]).map(rItem).join("")||'<p class="mu">沒有檢舉。</p>')}${secOf(ADM.open,"ab","近期修改簡介的商家（14 天內）",rb?.length||0,(rb||[]).map(bItem).join("")||'<p class="mu">近 14 天沒有商家修改簡介。</p>')}${secOf(ADM.open,"as","停權名單",sp?.length||0,(sp||[]).map(u=>`<div class="cm">${esc(u.nickname)} <a data-a="x.unsus" data-id="${u.id}">解除停權</a></div>`).join("")||'<p class="mu">沒有停權的帳號。</p>')}`;
