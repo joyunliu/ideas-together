@@ -41,7 +41,7 @@ input[type=date],input[type=time]{-webkit-appearance:none;appearance:none}
 #mb .game-tags label{display:inline-flex;align-items:center;gap:6px;margin:0;line-height:1.35;min-height:32px}
 #mb .game-tags input{width:16px;height:16px;flex:none;margin:0;accent-color:var(--ac-dark)}
 .draft-title{overflow-wrap:anywhere}
-.home-feed{margin:26px 0}.home-feed-head{display:flex;align-items:end;justify-content:space-between;gap:12px;margin:0 0 10px}.home-feed-head h3{margin:0;font-size:21px}.home-feed-head a{font-size:13px;font-weight:700}.home-mini-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.home-mini-grid .c{min-width:0}.home-welcome{padding:22px 24px;background:var(--card);border:1px solid var(--bd);border-radius:20px;margin:18px 0}.home-welcome p{margin:4px 0;color:var(--mu);font-size:14px}.home-feed-empty{padding:16px;border:1px dashed var(--bd);border-radius:14px;color:var(--mu);font-size:14px}
+.home-feed{margin:26px 0}.home-feed-head{display:flex;align-items:center;flex-wrap:wrap;gap:4px 12px;margin:0 0 10px}.home-feed-head h3{margin:0;font-size:21px}.home-feed-head a{font-size:13px;font-weight:700}.home-mini-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.home-mini-grid .c{min-width:0}.home-welcome{padding:22px 24px;background:var(--card);border:1px solid var(--bd);border-radius:20px;margin:18px 0}.home-welcome p{margin:4px 0;color:var(--mu);font-size:14px}.home-feed-empty{padding:16px;border:1px dashed var(--bd);border-radius:14px;color:var(--mu);font-size:14px}
 .view-meta{font-size:12px;color:var(--mu);margin-top:5px}.notice-banner{background:var(--ac2);border:1px solid var(--bd);color:var(--ac-dark);border-radius:14px;padding:13px 16px;margin:0 0 16px;font-size:14px}
 .filter-chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}.filter-chips span{background:var(--tg);border-radius:999px;padding:4px 10px;font-size:12px;color:var(--mu)}
 @media(max-width:760px){.home-mini-grid{grid-template-columns:1fr 1fr}.home-mini-grid .c:not(.event-card):last-child:nth-child(odd){display:none}.home-feed-head h3{font-size:19px}.toast{bottom:calc(16px + env(safe-area-inset-bottom))}.mb{padding:17px}}
@@ -93,6 +93,7 @@ body .ev.event-card{align-items:flex-start}
 .event-more-filters{border-top:1px solid var(--bd);padding-top:4px}
 .event-browse-head{flex-wrap:wrap}
 .event-list-actions{justify-content:space-between}
+body .event-view-controls.r{justify-content:flex-start;gap:0 16px}
 .event-list-actions [hidden]{display:none}
 .calendar-panel h3{margin:0 0 4px}
 .filter-chips .event-filter-chip{background:var(--tg);border:0;border-radius:999px;color:var(--tx);min-height:36px;padding:5px 10px}
@@ -512,7 +513,7 @@ const pickIcon=kind=>`<svg class="pick-icon" viewBox="0 0 24 24" fill="none" str
 function nav(){
   const acct=AUTH.u?`<button data-go="#/account">${esc(AUTH.me?.nickname||"我的帳號")}</button>`:`<button class="p" data-a="auth">登入／註冊</button>`;
   const mi=`<button data-go="#/events">找親子活動</button><button data-go="#/games">找居家遊戲</button>${CATEGORY_LINKS.map(([path,label])=>`<button data-go="#/resources/${path}">${label}</button>`).join("")}`+(AUTH.u?`<button data-go="#/account">我的帳號</button>`:"")+(AUTH.me?.is_admin?`<button data-go="#/admin">審核</button>`:"")+(AUTH.u?`<hr><button data-a="out">登出</button>`:"");
-  $("#nav").innerHTML=`<button class="desktop-nav" data-go="#/">首頁</button><button class="desktop-nav" data-go="#/events">找活動</button><button class="desktop-nav" data-go="#/games">找遊戲</button>${acct}<span class="mwrap"><button class="ic" data-a="menu" aria-label="選單" aria-expanded="false">${MENU_ICON}</button><div class="menu" id="menu">${mi}</div></span>`;
+  $("#nav").innerHTML=`<button class="desktop-nav" data-go="#/">首頁</button>${acct}<span class="mwrap"><button class="ic" data-a="menu" aria-label="選單" aria-expanded="false">${MENU_ICON}</button><div class="menu" id="menu">${mi}</div></span>`;
 }
 ACT.shut=()=>{
   if(activeDraft?.submitting)return;
@@ -1200,7 +1201,7 @@ function home(){
   <div class="filter-label">參與對象</div><div class="filter-row">${grp("aud",[["family","親子"],["kids","只有孩子"],["parents","只有家長"]])}</div>
   <div class="filter-label">活動來源</div><div class="filter-row">${grp("org",[["personal","個人主辦"],["organization","商家／機構主辦"],["shared","轉貼他人活動"]])}</div></div>
   </div>
-  <div class="r event-list-actions"><div class="r" aria-label="顯示方式"><button data-a="e.view" data-v="list" aria-controls="event-list">列表</button><button data-a="e.view" data-v="calendar" aria-controls="event-calendar">月曆</button></div><div class="r" id="event-sort"><button data-a="e.sort" data-v="soon">即將到來</button><button data-a="e.sort" data-v="new">最新活動</button></div></div>
+  <div class="r event-list-actions event-view-controls"><div class="r" role="group" aria-label="顯示方式"><button data-a="e.view" data-v="list" aria-controls="event-list">列表</button><button data-a="e.view" data-v="calendar" aria-controls="event-calendar">月曆</button></div><div class="r" id="event-sort" role="group" aria-label="活動排序"><button data-a="e.sort" data-v="soon">即將到來</button><button data-a="e.sort" data-v="new">最新活動</button></div></div>
   <section class="discovery-results" id="event-list" tabindex="-1" aria-label="活動列表"><div class="filter-actions"><span class="filter-count" id="fcount" aria-live="polite"></span><button data-a="e.jump">跳到活動列表</button><button data-a="e.clr">清除所有篩選</button></div><div class="filter-chips" id="active-event-filters"></div>
   <section class="calendar-panel" id="event-calendar" aria-labelledby="event-calendar-title"><h3 id="event-calendar-title">活動月曆</h3><p class="mu" style="margin:0 0 10px">點選有活動的日期可查看當天的列表。</p><div class="card-box" id="cal"></div></section>
   <div id="event-cards" tabindex="-1"><div id="el"></div><div class="r event-list-actions"><button id="event-show-all" data-a="e.all" aria-controls="el"></button></div></div></section>`;
