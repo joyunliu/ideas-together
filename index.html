@@ -47,6 +47,7 @@ input[type=date],input[type=time]{-webkit-appearance:none;appearance:none}
 @media(max-width:760px){.home-mini-grid{grid-template-columns:1fr 1fr}.home-mini-grid .c:last-child:nth-child(odd){display:none}.home-feed-head h3{font-size:19px}.toast{bottom:calc(16px + env(safe-area-inset-bottom))}.mb{padding:17px}}
 @media(max-width:430px){.home-mini-grid{grid-template-columns:1fr}.home-mini-grid .c:last-child:nth-child(odd){display:block}.home-feed-head{align-items:center}}
 .browse-filters>summary,.posting-rules>summary{cursor:pointer;font-weight:700;color:var(--ac-dark)}
+.filter-panel .browse-filters{margin-top:12px}
 .filter-panel .browse-filters>summary{padding:6px 0}
 .browse-filters .filter-footer{margin-bottom:0}
 .filter-panel .filter-actions{display:flex;align-items:center;justify-content:space-between;gap:12px 16px;flex-wrap:wrap;margin-top:14px;padding-top:12px;border-top:1px solid var(--bd)}
@@ -442,8 +443,8 @@ function home(){
   <section class="hero"><div class="hero-copy"><div class="eyebrow">IDEAS TOGETHER · 親子靈感共享</div><h2>育兒的好點子，<em>一起分享。</em></h2><p>找遊戲、學方法、分享你的育兒日常。每個家庭的小點子，都可能成為另一個家庭的大幫助。</p><div class="hero-actions"><button class="p" data-a="g.new">＋ 分享我的點子</button><button data-a="g.rand">🎲 今天玩什麼？</button></div></div></section>
   <div class="section-head"><div><h2>找一個今天就能玩的點子</h2><p>依孩子年齡、遊戲類型或家裡現有材料來探索。</p></div><div class="count-line">目前收集 ${published} 個遊戲點子</div></div>
   <section class="filter-panel"><div class="search-wrap"><input id="q" type="search" aria-label="搜尋遊戲" placeholder="搜尋遊戲名稱、玩法或材料…" value="${esc(S.q)}"></div>
-  <details class="browse-filters" ${S.filterOpen?"open":""}><summary>更多篩選</summary><div class="browse-content">
   <div class="filter-label">孩子的年齡</div><div class="filter-row">${B("age",-1,"不限年齡",S.ages.size===0)}${AGES.map((a,i)=>B("age",i,a,S.ages.has(i))).join("")}</div>
+  <details class="browse-filters" ${S.filterOpen?"open":""}><summary>更多篩選</summary><div class="browse-content">
   <div class="filter-label">想玩哪一種？</div><div class="filter-row">${TAGS.map(t=>B("tags",t,t,S.tags.has(t))).join("")}</div>
   ${ms.length?`<div class="filter-label">我家有這些材料</div><div class="filter-row">${ms.map(m=>B("have",m,m,S.have.has(m))).join("")}${S.have.size?'<button data-a="g.clr">清除材料</button>':""}</div>`:""}
   <div class="filter-footer"><div class="r"><span class="mu">排序</span>${B("sort","new","最新分享",S.sort==="new")}${B("sort","likes","最多按讚",S.sort==="likes")}${B("sort","favs","最多收藏",S.sort==="favs")}${B("fav",1,"只看我的收藏",S.fav)}</div></div></div></details>
@@ -728,9 +729,9 @@ function home(){
   const grp=(k,arr)=>arr.map(([v,t])=>`<button data-a="e.ft" data-k="${k}" data-v="${v}" aria-pressed="${S[k].has(String(v))}" class="${S[k].has(String(v))?"on":""}">${t}</button>`).join("");
   $("#app").innerHTML=`<div class="section-head hrow"><h2>親子活動日曆</h2><button class="p" data-a="e.new">＋ 分享活動</button></div><p class="mu" style="margin:-4px 8px 12px">查看近期活動，依地點、年齡、費用與時間篩選。活動資訊由主辦方提供，請以主辦方公告為準。</p>
   <div class="filter-panel"><div class="search-wrap"><input id="q" type="search" aria-label="搜尋活動" placeholder="搜尋活動名稱、說明或地點…" value="${esc(S.q)}"></div>
-  <details class="browse-filters" ${S.advOpen?"open":""}><summary>更多篩選</summary><div class="browse-content">
   <div class="filter-label">快速找活動（可複選）</div><div class="filter-row">${grp("when",[["today","今天"],["weekend","本週末"],["7d","7 天內"],["month","本月"]])}<button data-a="e.favonly" aria-pressed="${S.favOnly}" class="${S.favOnly?"on":""}">只看我的收藏</button></div>
   <div class="filter-label">時段（可複選）</div><div class="filter-row">${grp("tod",[["am","早上"],["pm","下午"],["ev","晚上"]])}</div>
+  <details class="browse-filters" ${S.advOpen?"open":""}><summary>更多篩選</summary><div class="browse-content">
   <div class="filter-label">預約方式</div><div class="filter-row">${grp("booking",[["flex","可自行預約"]])}</div>
   <div class="filter-label">縣市</div><div class="filter-row">${grp("city",CITIES.map(c=>[c,c]))}</div>
   <div class="filter-label">孩子年齡</div><div class="filter-row">${grp("age",EVENT_AGES.map(([label],i)=>[i,label]))}</div>
