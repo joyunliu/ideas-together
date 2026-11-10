@@ -742,7 +742,7 @@ const bookingOptions=(value="",placeholder="尚未確認")=>'<option value="">'+
 const bookingState=(e,slot)=>["cancelled","full"].includes(e.booking_status)?e.booking_status:(slot&&Object.hasOwn(BOOKING,slot.booking)?slot.booking:e.booking_status);
 const bookingBadge=(e,slot)=>{
   const state=bookingState(e,slot);
-  const label=BOOKING[state]||(e.schedule?.some(s=>Object.hasOwn(BOOKING,s.booking))?"依場次":"報名待確認");
+  const label=BOOKING[state]||(!slot&&e.schedule?.some(s=>Object.hasOwn(BOOKING,s.booking))?"依場次":"報名待確認");
   return `<span class="t ${["walkin","open"].includes(state)?"ok":["full","cancelled"].includes(state)?"event-booking-closed":""}">${label}</span>`;
 };
 const hasMonths=e=>Number.isInteger(e.age_min_month)&&Number.isInteger(e.age_max_month);
