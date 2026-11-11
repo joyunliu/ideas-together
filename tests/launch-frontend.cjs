@@ -36,10 +36,62 @@ assert.equal(check('upcomingSlots({...e,listing_type:"resource"},now).length'),3
 assert.equal(check('feeTxt({fee:0})'),"免費");
 assert.equal(check('feeTxt({fee:500})'),"NT$ 500");
 assert.equal(check('feeTxt({fee:350,fee_type:"range"})'),"NT$ 350 起");
+assert.equal(check('feeTxt({fee:350,fee_type:"range",fee_max:500})'),"NT$ 350–500");
 assert.equal(check('feeTxt({fee:0,fee_type:"announcement"})'),"費用依公告");
 assert.equal(check('feeMatches({fee:0,fee_type:"announcement"},"500")'),false);
 assert.equal(check('feeMatches({fee:0,fee_type:"range"},"free")'),false);
 console.log("PASS: inline script syntax, analytics redaction/deduplication, Taipei date rules, legacy and structured prices");
+
+const priceFields=Object.fromEntries(["fee-free","fee-amount","fee-upper","ff","fee-max","fee-label","fn"]
+  .map(id=>["#event-"+id,{hidden:false,disabled:false}]));
+let priceType;
+const priceForm=vm.createContext({$:id=>priceFields[id],val:()=>priceType});
+vm.runInContext(block("const feeFields=()=>","  $(\"#event-fee-type\").onchange"),priceForm);
+for(const [type,visibility] of [
+  ["free",[true,false,false]],["fixed",[false,true,false]],["range",[false,true,true]],["announcement",[false,false,false]]
+]){
+  priceType=type;
+  vm.runInContext("feeFields()",priceForm);
+  assert.deepEqual(["fee-free","fee-amount","fee-upper"].map(id=>!priceFields["#event-"+id].hidden),visibility);
+  assert.equal(priceFields["#event-ff"].disabled,!visibility[1]);
+  assert.equal(priceFields["#event-fee-max"].disabled,!visibility[2]);
+  assert.equal(priceFields["#event-fn"].disabled,false);
+}
+console.log("PASS: fee types show the relevant fields and preserve the optional note");
+
+async function checkDraftWizard(){
+  const panels=Array.from({length:3},()=>({querySelector:()=>({focus(){}})}));
+  const back={},next={},send={},error={},disabledField={disabled:true};
+  const selectors={".post-error":error,"[data-back]":back,"[data-next]":next,"[data-submit]":send};
+  const ctx={step:0,form:{
+    querySelector:key=>selectors[key],
+    querySelectorAll:key=>key===".post-step"?panels:key===".post-steps li"?[]:[send,disabledField]
+  }};
+  let saves=0,submissions=0,complete=false;
+  const checked=[];
+  const c=vm.createContext({ctx,saveActiveDraft:()=>saves++,submissionSuccess:()=>{},zh:e=>e.message,
+    config:{validate(step){checked.push(step);return step===0&&!complete?"活動主題必填":""},
+      preview(){},async submit(){submissions++;throw new Error("測試失敗")}}});
+  vm.runInContext(block("function bindWizard(","function saveActiveDraft(")+"bindWizard(ctx,null,config)",c);
+  next.onclick();
+  next.onclick();
+  assert.equal(ctx.step,2);
+  assert.equal(saves,2);
+  assert.deepEqual(checked,[]);
+  await send.onclick();
+  assert.equal(ctx.step,0);
+  assert.equal(error.textContent,"活動主題必填");
+  assert.equal(submissions,0);
+  complete=true;
+  next.onclick();
+  next.onclick();
+  await send.onclick();
+  assert.deepEqual(checked,[0,0,1,2]);
+  assert.equal(submissions,1);
+  assert.equal(disabledField.disabled,true);
+  console.log("PASS: incomplete drafts advance and save, submission checks all steps, disabled fields survive retries");
+}
+checkDraftWizard().catch(error=>{console.error(error);process.exitCode=1});
 
 async function checkReview(){
   const updates=[], removed=[], messages=[], notices=[];

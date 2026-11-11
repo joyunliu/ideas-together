@@ -76,6 +76,24 @@ await assert.rejects(db.query(`select launch_review_report('${report}','dismisse
 const p={title:"親子測試",fee:350,fee_type:"range",fee_max:500};
 const imported=await db.query("select submit_verified_event_import($1::jsonb,$2,null,$3) as id",[JSON.stringify(p),"https://example.invalid/test","親子活動"]);
 assert.equal((await db.query("select fee_max from events where id=$1",[imported.rows[0].id])).rows[0].fee_max,500);
+await as("postgres");
+await db.exec(fs.readFileSync("supabase/optional-import-end-time.sql","utf8"));
+await db.exec(`
+create temporary table import_time_test(changes jsonb default '{}', base_record jsonb, audience_evidence text default '親子活動');
+create trigger check_import_time before insert on import_time_test
+  for each row execute function public.validate_new_import_suggestion();
+`);
+const insertTime=timing=>db.query("insert into import_time_test(base_record) values ($1::jsonb)",[JSON.stringify({
+  title:"親子活動",description:"親子共玩",shared_organizer:"主辦單位",city:"線上活動",
+  start_at:"2026-12-01T09:00:00+08:00",flex_time:false,booking_status:"walkin",
+  audience:"family",age_min:3,age_max:6,link:"https://example.invalid/event",...timing
+})]);
+await insertTime({end_at:null});
+await insertTime({schedule:[{d:"2026-12-01",s:"09:00",e:null}]});
+await assert.rejects(insertTime({continuous:true,end_at:null}),/跨日連續/);
+await assert.rejects(insertTime({end_at:"2026-12-01T08:00:00+08:00"}),/結束時間需晚於/);
+await assert.rejects(insertTime({schedule:[{d:"2026-12-01",s:"09:00",e:"08:00"}]}),/每場活動的日期與時間/);
+console.log("PASS: imported events accept optional end times and reject invalid or missing required end times");
 // Mirror the production event policies relevant to submitting and reviewing.
 await db.exec(`
 reset role;
