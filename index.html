@@ -615,14 +615,39 @@ async function savePost(ctx,table,row,files,previous,photoFields,importOrigin){
 const MENU_ICON='<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg>';
 function modal(h){E.closeQuick();activeDraft=null;$("#mb").innerHTML='<button class="x" data-a="shut" aria-label="關閉">✕</button>'+h;$("#md").classList.add("s")}
 let submissionIntent=null;
+const signupSubmissionKey=uid=>"ideas_signup_submission:"+uid;
+function rememberSignupSubmission(uid,type){
+  try{
+    localStorage.setItem(signupSubmissionKey(uid),type);
+    return true;
+  }catch{return false}
+}
+function takeSignupSubmission(uid){
+  try{
+    const key=signupSubmissionKey(uid),type=localStorage.getItem(key);
+    localStorage.removeItem(key);
+    return type==="game"||type==="event"?type:null;
+  }catch{return null}
+}
 function shut(){if(activeDraft?.submitting)return;const trigger=submissionIntent?.trigger;submissionIntent=null;activeDraft=null;$("#md").classList.remove("s");$("#mb").replaceChildren();refreshDraftList();trigger?.focus({preventScroll:true})}
 const need=(type,trigger)=>{if(!AUTH.u){
   submissionIntent=type?{type,trigger}:null;
   authBox();return false
 }if(AUTH.me?.suspended){alert("你的帳號已被停權，無法使用此功能。如有疑問請來信 "+MAIL);return false}return true};
 function authBox(reg, purpose=""){
-  const heading=reg?"註冊":submissionIntent?"登入後分享"+(submissionIntent.type==="game"?"遊戲":"活動"):purpose||"登入";
-  modal(`<h3 style="margin-top:0">${heading}</h3>${reg?'<div class="r" style="margin:6px 0 10px"><label style="margin:0;flex:none"><input type="radio" name="at" value="personal" checked style="width:auto;margin:0 4px 0 0">個人</label><label style="margin:0;flex:none"><input type="radio" name="at" value="organization" style="width:auto;margin:0 4px 0 0">商家／機構</label></div><label>暱稱或商家／機構名稱（2–30 字，之後無法修改）<input id="an" maxlength="30"></label><div id="orgx" style="display:none"><label>商家或機構簡介（10–200 字，會顯示在你的活動頁）<textarea id="ab" rows="3" maxlength="200"></textarea></label><label>官方網站（選填）<input id="aw" type="url" maxlength="200" placeholder="https://"></label></div>':""}<label>Email<input id="ae" type="email"></label><label>密碼（至少 6 字）<input id="ap" type="password"></label>${reg?'<input id="hp" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px"><label class="mu" style="display:block;margin-bottom:10px"><input type="checkbox" id="ag" style="width:auto;margin:0 6px 0 0">我已閱讀並同意<a href="#/terms" target="_blank">使用條款與免責聲明</a>及<a href="#/privacy" target="_blank">隱私權政策</a></label>':""}<div id="cf"></div><div class="r"><button class="p" data-a="${reg?"signup":"login"}">${reg?"註冊":"登入"}</button><button data-a="shut">取消</button><a data-a="${reg?"auth":"reg"}">${reg?"已有帳號？登入":"沒有帳號？註冊"}</a>${reg?"":'<a data-a="forgot">忘記密碼？</a>'}</div><div class="mu" id="ae2"></div>`);setTimeout(cfInit,50);document.querySelectorAll("[name=at]").forEach(r=>r.onchange=()=>{const o=$("#orgx");if(o)o.style.display=document.querySelector("[name=at]:checked").value==="organization"?"block":"none"});
+  const shareType=submissionIntent?.type;
+  const shareLabel=shareType==="game"?"遊戲":"活動";
+  const heading=reg?(shareType?"免費註冊，繼續分享"+shareLabel:"免費註冊"):shareType?"登入後分享"+shareLabel:purpose||"登入";
+  const description=shareType
+    ? (shareType==="game"?"個人帳號可以分享在家就能玩的親子遊戲，準備好材料清單和玩法。":"分享自己主辦或從官方公告找到的親子活動，準備好日期、地點和費用。")+"送出後會先審核，你可以在「我的投稿」查看進度。"
+    : "可先瀏覽，註冊後可收藏活動與遊戲、分享自己的點子。";
+  modal(`<h3 style="margin-top:0">${heading}</h3><p class="mu">${description}</p>${reg?'<div class="r" id="account-types" style="margin:6px 0 10px"><label style="margin:0;flex:none"><input type="radio" name="at" value="personal" checked style="width:auto;margin:0 4px 0 0">個人</label><label style="margin:0;flex:none"><input type="radio" name="at" value="organization" style="width:auto;margin:0 4px 0 0">商家／機構</label></div><label><span id="an-label">暱稱</span>（2–30 字，之後無法修改）<input id="an" maxlength="30"></label><div id="orgx" style="display:none"><label>商家或機構簡介（10–200 字，會顯示在你的活動頁）<textarea id="ab" rows="3" maxlength="200"></textarea></label><label>官方網站（選填）<input id="aw" type="url" maxlength="200" placeholder="https://"></label></div>':""}<label>Email<input id="ae" type="email"></label><label>密碼（至少 6 字）<input id="ap" type="password"></label>${reg?'<input id="hp" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px"><label class="mu" style="display:block;margin-bottom:10px"><input type="checkbox" id="ag" style="width:auto;margin:0 6px 0 0">我已閱讀並同意<a href="#/terms" target="_blank">使用條款與免責聲明</a>及<a href="#/privacy" target="_blank">隱私權政策</a></label>':""}<div id="cf"></div><div class="r"><button class="p" data-a="${reg?"signup":"login"}">${reg?"免費註冊":"登入"}</button><button type="button" data-a="${reg?"auth":"reg"}">${reg?"已有帳號？登入":"免費註冊"}</button><button data-a="shut">取消</button>${reg?"":'<a data-a="forgot">忘記密碼？</a>'}</div><div class="mu" id="ae2"></div>`);setTimeout(cfInit,50);
+  if(reg&&shareType==="game")$("#account-types").style.display="none";
+  document.querySelectorAll("[name=at]").forEach(r=>r.onchange=()=>{
+    const organization=r.value==="organization";
+    $("#an-label").textContent=organization?"商家／機構名稱":"暱稱";
+    $("#orgx").style.display=organization?"block":"none";
+  });
 }
 function pwBox(){modal(`<h3 style="margin-top:0">設定新密碼</h3><label>新密碼（至少 6 字）<input id="np" type="password"></label><div class="r"><button class="p" data-a="setpw">更新密碼</button></div><div class="mu" id="ae2"></div>`)}
 
@@ -669,10 +694,16 @@ async function finishLogin(session,input){
     if(at==="organization"){bio=$("#ab").value.trim();web=$("#aw").value.trim();if(bio.length<10)return $("#ae2").textContent="請填寫商家或機構簡介（至少 10 字）。";if(web&&!/^https?:\/\/[^\s]+$/i.test(web))return $("#ae2").textContent="官方網站需以 http:// 或 https:// 開頭。"}
     const{data:ex}=await sb.from("profiles").select("id").eq("nickname",n);if(ex&&ex.length)return $("#ae2").textContent="這個名稱已被使用。";
     const email=$("#ae"),message=$("#ae2");
+    const shareType=submissionIntent?.type;
     const{data,error}=await sb.auth.signUp({email:email.value.trim(),password:$("#ap").value,options:{data:{nickname:n,account_type:at,bio,website:web},captchaToken:CF()}});
     if(!error&&data.session&&submissionIntent)return finishLogin(data.session,email);
     if(!message.isConnected)return;
-    if(error){message.textContent="註冊失敗："+zh(error);cfReset()}else{message.textContent="註冊成功！若沒有自動登入，請到信箱點確認信。"}
+    if(error){message.textContent="註冊失敗："+zh(error);cfReset();return}
+    if(data.session){message.textContent="註冊成功，已登入。";return}
+    const resume=shareType&&data.user?.id&&rememberSignupSubmission(data.user.id,shareType);
+    message.textContent=resume
+      ? "請到信箱開啟確認信，並用同一個瀏覽器返回本站，即可繼續分享"+(shareType==="game"?"遊戲":"活動")+"。"
+      : "請到信箱開啟確認信，完成驗證後即可登入。";
   },
   async forgot(){const em=$("#ae").value.trim();if(!em)return $("#ae2").textContent="請先在上面填入 Email。";
     const{error}=await sb.auth.resetPasswordForEmail(em,{redirectTo:location.href.split("#")[0],captchaToken:CF()});cfReset();
@@ -997,7 +1028,7 @@ const bookingOptions=(value="",placeholder="尚未確認")=>'<option value="">'+
 const bookingState=(e,slot)=>["cancelled","full","postponed"].includes(e.booking_status)?e.booking_status:(slot&&Object.hasOwn(BOOKING,slot.booking)?slot.booking:e.booking_status);
 const bookingBadge=(e,slot)=>{
   const state=bookingState(e,slot);
-  const label=BOOKING[state]||(!slot&&e.schedule?.some(s=>Object.hasOwn(BOOKING,s.booking))?"依場次":"報名待確認");
+  const label=BOOKING[state]||(!slot&&e.schedule?.some(s=>Object.hasOwn(BOOKING,s.booking))?"依場次":"報名狀態請看公告");
   return `<span class="t event-label event-tag-booking ${["full","cancelled","postponed"].includes(state)?"event-booking-closed":""}">${label}</span>`;
 };
 const hasMonths=e=>Number.isInteger(e.age_min_month)&&Number.isInteger(e.age_max_month);
@@ -2211,10 +2242,10 @@ async function homePage(){
   $("#app").innerHTML=`${notice?`<div class="notice-banner">✓ ${esc(notice)} 你可以在「我的投稿」查看審核狀態。</div>`:""}<div class="intro"><h2>今天想找什麼？</h2><p>找靈感、找活動，也把生活中的好點子分享出去。</p></div>
 <div class="choose">
 <a class="pick a" href="#/events">${pickIcon("events")}<h2>找親子活動</h2><p>依地點、孩子年齡、費用與時間找近期活動。</p><span class="go">找近期活動 →</span></a>
-<a class="pick b2" href="#/games">${pickIcon("games")}<h2>找遊戲</h2><p>在家就能玩的親子遊戲點子，依孩子年齡和現有材料來找。</p><span class="go">找遊戲點子 →</span></a>
+<a class="pick b2" href="#/games">${pickIcon("games")}<h2>找居家遊戲</h2><p>在家就能玩的親子遊戲點子，依孩子年齡和現有材料來找。</p><span class="go">找遊戲點子 →</span></a>
 </div>
-<section class="home-feed"><div class="home-feed-head"><h3>近期親子活動</h3><a href="#/events">查看全部活動 →</a></div>${eventHtml}</section>
 <section class="home-more"><h3>更多親子資源</h3>${categoryShortcuts()}</section>
+<section class="home-feed"><div class="home-feed-head"><h3>近期親子活動</h3><a href="#/events">查看全部活動 →</a></div>${eventHtml}</section>
 <section class="home-feed"><div class="home-feed-head"><h3>最新遊戲分享</h3><a href="#/games">瀏覽全部遊戲 →</a></div>${gameHtml}</section>
 <div class="share"><h3>一起分享，讓更多家庭找到好點子</h3><p>你可以刊登自己主辦的活動、轉貼公開親子活動，或分享居家遊戲。本站不代收報名與費用。</p><div class="share-actions"><a class="primary" href="#/share-event">分享活動</a><a href="#/share-game">分享遊戲</a></div></div>`;
 }
@@ -2726,6 +2757,12 @@ function setUser(sess){
     AUTH.me=profile?.data||null;
     G.reset();E.reset();nav();
     await ROUTE(true);
+    if(!uid||authUserId!==uid||activeDraft)return;
+    const shareType=takeSignupSubmission(uid);
+    if(shareType){
+      shut();
+      (shareType==="game"?G:E).openNew();
+    }
   })();
   return authUpdate;
 }
