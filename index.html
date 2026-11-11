@@ -1871,13 +1871,14 @@ async function readEventLink(link){
   return error?{code:"unavailable"}:data;
 }
 function eventDraftFromText(raw) {
-    const lines=raw.normalize("NFKC").split(/\r?\n/).map(line=>line.trim()
+    const lines=raw.normalize("NFKC").split(/\r?\n/).map(line=>line
+      .replace(/&(?:#x20|#32|nbsp|#160);/gi," ").replace(/\[([^\]\n]+)\]\(https?:\/\/[^\s)]+\)/gi,"$1").trim()
       .replace(/^(?:[-+•]\s+|\*\s+|#{1,6}\s+)/,"").replace(/\*\*|__/g,"")
       .replace(/\\+$/,"").trim()).filter(Boolean);
     const field=(pattern)=>lines.map(line=>line.match(pattern)?.[1]).find(Boolean)||"";
-    const datePattern=/\b(20\d{2})\s*[-/.年]\s*(\d{1,2})\s*[-/.月]\s*(\d{1,2})(?:日)?/g;
-    const datesOf=line=>[...line.matchAll(datePattern)].map(([,year,month,day])=>{
-      const date=[year,month.padStart(2,"0"),day.padStart(2,"0")].join("-");
+    const datePattern=/(?<!\d)(?:(20\d{2})\s*[-/.年]|(?:民國\s*)?([1-9]\d{1,2})\s*年)\s*(\d{1,2})\s*[-/.月]\s*(\d{1,2})(?:日)?/g;
+    const datesOf=line=>[...line.matchAll(datePattern)].map(([,year,rocYear,month,day])=>{
+      const date=[year||String(1911+Number(rocYear)),month.padStart(2,"0"),day.padStart(2,"0")].join("-");
       const utc=new Date(date+"T00:00:00Z");
       return Number.isFinite(+utc)&&utc.toISOString().slice(0,10)===date?date:"";
     }).filter(Boolean);
@@ -1905,16 +1906,22 @@ function eventDraftFromText(raw) {
     const amount=feeText.match(/^(?:NT\$\s*)?(\d{1,5})\s*元?$/i)
       ||feeText.match(/(?:每組|每人|每場|新台幣|新臺幣|NT\$)\s*(\d{1,5})\s*元?(?!\d)/i);
     const place=field(/^(?:活動地點|地點|場館)\s*:\s*(.+)/);
-    const location=place.match(/^(.*?)\s*((?:台|臺)北市|(?:台|臺)中市|(?:台|臺)南市|(?:台|臺)東縣|新北市|高雄市|桃園市|[\p{Script=Han}]{2}[縣市])(?=[\p{Script=Han}\d])/u);
+    const parenthetical=place.match(/^(.*?)\s*\(([^()]*(?:路|街|大道)[^()]*號[^()]*)\)\s*$/u);
+    const location=parenthetical||place.match(/^(.*?)\s*((?:台|臺)北市|(?:台|臺)中市|(?:台|臺)南市|(?:台|臺)東縣|新北市|高雄市|桃園市|[\p{Script=Han}]{2}[縣市])(?=[\p{Script=Han}\d])/u);
+    const venue=location?.[1]?.trim()||place;
+    const address=field(/^地址\s*:\s*(.+)/)||parenthetical?.[2]?.trim()||(location?place.slice(location[1].length).trim():"");
+    const header=lines.findIndex(line=>/^(?:活動日期|日期|活動時間|時間|活動地點|地點|場館|地址|活動對象|參加對象|對象|費用|票價|報名方式|主辦單位|主辦方|上午場|下午場|場次)\s*[:|]/.test(line));
+    const firstLine=lines[0]||"";
+    const title=field(/^(?:活動名稱|活動標題|活動主題|標題)\s*:\s*(.+)/)
+      ||(header>0&&/^[^:。！？!?]{4,50}$/.test(firstLine)&&!/^(?:活動簡介|活動說明|活動介紹|簡介)$/.test(firstLine)?firstLine:"");
+    const venueOrganization=venue.match(/^(.{2,30}?(?:親子館|圖書館|博物館|美術館|藝術館|文化中心))(?=\s|$)/u)?.[1]||"";
+    const organizer=field(/^(?:主辦單位|主辦方)\s*:\s*(.+)/)||(venueOrganization&&title.startsWith(venueOrganization)?venueOrganization:"");
     const oldDates=dates.length>0&&dates.every(day=>day<ymd(taipeiToday()));
     const intro=lines.findIndex(line=>/^(?:活動簡介|活動說明|活動介紹|簡介)$/.test(line));
     const description=field(/^(?:活動簡介|活動說明|活動介紹|簡介)\s*:\s*(.+)/)
-      ||(intro>=0?lines.slice(intro+1).filter(line=>!/^(?:時間|活動時間|地點|活動地點|場館|費用|票價|報名費)\s*:/.test(line)).join("\n\n"):"");
+      ||(intro>=0?lines.slice(intro+1).filter(line=>!/^(?:時間|活動時間|地點|活動地點|場館|費用|票價|報名費)\s*:/.test(line)).join("\n\n"):header>0?lines.slice(title===firstLine?1:0,header).join("\n\n"):"");
     return {
-      title:field(/^(?:活動名稱|活動標題|標題)\s*:\s*(.+)/),
-      venue:location?.[1]?.trim()||place,
-      address:field(/^地址\s*:\s*(.+)/)||(location?place.slice(location.index+location[1].length).trim():""),
-      organizer:field(/^(?:主辦單位|主辦方)\s*:\s*(.+)/),
+      title,venue,address,organizer,
       age:field(/^(?:適合年齡|參加對象|活動對象|對象)\s*:\s*(.+)/),
       description,
       fee:/^(免費|免費參加|免費入場)[。！!]?$/u.test(feeText)?0:amount?Number(amount[1]):undefined,
