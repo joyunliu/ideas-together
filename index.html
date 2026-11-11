@@ -242,9 +242,10 @@ body .category-shortcuts a{color:#465534}
 .discovery-results .filter-chips:empty{display:none}
 body .discovery-results .filter-chips .event-filter-chip,body .filter-panel .filter-row button.on,body .event-quick-dates button.on,body .event-list-actions button.on{background:#465534;color:#fff;border-color:#465534}
 body .event-card .event-date-label{align-self:flex-start;margin:0 0 5px}
-.home-mini-grid:has(.event-card){align-items:start}
-body .event-card .event-links a.b,body .resource-grid a.p,body .detail-official{background:#465534;border-color:#465534;color:#fff;text-decoration:none}
-.event-card .event-links a.b,.resource-grid a.p{padding:7px 10px}
+.home-mini-grid:has(> .event-card){grid-template-columns:minmax(0,1fr);align-items:start}
+body .resource-grid a.p{background:#465534;border-color:#465534;color:#fff;text-decoration:none;padding:7px 10px}
+body a.event-official-button{display:inline-flex;align-items:center;min-height:40px;padding:7px 12px;border:1px solid #465534;border-radius:999px;background:#465534;color:#fff;font-size:13px;font-weight:700;text-decoration:none}
+body a.event-official-button:hover{background:#364329;border-color:#364329;color:#fff;text-decoration:none}
 .resource-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
 .resource-grid article{background:#fff;border:1px solid var(--bd);border-radius:16px;padding:16px;overflow-wrap:anywhere}
 .resource-grid article h3{font-size:17px}
@@ -257,7 +258,6 @@ body .event-detail-meta .t{margin:0}
 .detail-block p{margin:5px 0}
 .visit-note{white-space:pre-line}
 .detail-block .session-day{margin:0;padding-inline-start:28px}
-body .detail-official{display:inline-block;padding:8px 12px}
 @media(prefers-color-scheme:dark){
   .resource-grid article{background:var(--card)}
   body .event-summary .t,body .resource-facts .t,body .game-facts .t,body .event-date-label{color:var(--tx)}
@@ -294,6 +294,31 @@ body .event-summary .t.event-booking-closed,body .resource-facts .t.event-bookin
 .admin-group>h3{padding-inline:8px}
 [data-admin-target]{scroll-margin-top:16px}
 [data-admin-target]:focus-visible{outline:2px solid var(--ac-dark);outline-offset:3px}
+.layout-card-date{padding:12px 14px 0}.layout-card-date .event-date-label{font-weight:700}.event-card .event-title{margin-top:0}.session-day.is-selected{display:grid;gap:7px}.session-day.is-selected li{padding:5px 0}
+@media(min-width:761px){
+  .home-mini-grid > .event-card .cb{display:grid;grid-template-columns:minmax(0,1fr) minmax(165px,auto);align-items:end;gap:16px 24px;padding-top:7px}
+  .home-mini-grid > .event-card .layout-card-actions .event-links{justify-content:flex-end;padding-top:0}
+  .home-mini-grid > .event-card:has(.event-cover){display:grid;grid-template-columns:140px minmax(0,1fr)}
+  .home-mini-grid > .event-card:has(.event-cover) .layout-card-date{grid-column:1/-1}
+  .home-mini-grid > .event-card .event-cover{margin:7px 0 14px 14px;border-radius:10px;align-self:center}
+}
+.event-tag-session{--label-bg:#eee5f6;--label-text:#563872}
+.event-tag-age{--label-bg:#e4eef9;--label-text:#244e75}
+.event-tag-fee{--label-bg:#e5efd9;--label-text:#354d23}
+.event-tag-booking{--label-bg:#f8ebcd;--label-text:#69470c}
+.event-tag-source{--label-bg:#f3e5dc;--label-text:#70432f}
+.event-tag-audience{--label-bg:#dcefeb;--label-text:#245a50}
+.event-tag-booking.event-booking-closed{--label-bg:#f9e1e2;--label-text:#842f2d}
+body .t.event-label,body .event-summary .t.event-label{background:var(--label-bg);color:var(--label-text)}
+@media(prefers-color-scheme:dark){
+  .event-tag-session{--label-bg:#40324d;--label-text:#e5cff4}
+  .event-tag-age{--label-bg:#253d54;--label-text:#c6e1fb}
+  .event-tag-fee{--label-bg:#33402a;--label-text:#d5ebbe}
+  .event-tag-booking{--label-bg:#4e3c20;--label-text:#f6dda8}
+  .event-tag-source{--label-bg:#49332a;--label-text:#f3ceba}
+  .event-tag-audience{--label-bg:#243f39;--label-text:#bce9df}
+  .event-tag-booking.event-booking-closed{--label-bg:#532f32;--label-text:#ffc8ca}
+}
 </style></head><body>
 <div class="w"><nav aria-label="主選單"><a class="brand" href="#/"><h1><svg class="brand-mark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path fill="#f8d47b" d="M8 17v-2a7 7 0 1 1 8 0v2z"/><path d="M9 20h6M10 22h4"/><path fill="#825716" stroke="none" d="M12 13s-4-2.4-4-4.5c0-2 2.7-2.8 4-.8 1.3-2 4-1.2 4 .8 0 2.1-4 4.5-4 4.5z"/></svg><span>點子共玩所<small>Ideas together</small></span></h1></a><div class="r" id="nav"></div><div class="tag">交換遊戲靈感，玩出親子生活的無限可能</div></nav>
 <div id="app"></div>
@@ -624,7 +649,7 @@ const categoryShortcuts=active=>`<div role="navigation" class="category-shortcut
 const pickIcon=kind=>`<svg class="pick-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true">${kind==="events"?'<rect x="3" y="5" width="18" height="16" rx="3" fill="#f8d47b"/><path d="M7 3v5m10-5v5M3 10h18m-14 4h3m4 0h3m-10 3h3"/>':'<path fill="#f8d47b" d="M4 12h16v9H4zM7 12V5h10v7m-7-7V3m4 2V3M8 12v-2m8 2v-2"/><path d="M12 13v8"/>'}</svg>`;
 function nav(){
   const acct=AUTH.u?`<button data-go="#/account">${esc(AUTH.me?.nickname||"我的帳號")}</button>`:`<button class="p" data-a="auth">登入</button>`;
-  const mi=`<button data-go="#/events">找親子活動</button><button data-go="#/games">找居家遊戲</button>${CATEGORY_LINKS.map(([path,label])=>`<button data-go="#/resources/${path}">${label}</button>`).join("")}`+(AUTH.u?`<button data-go="#/account">我的帳號</button>`:"")+(AUTH.me?.is_admin?`<button data-go="#/admin">管理後台</button>`:"")+(AUTH.u?`<hr><button data-a="out">登出</button>`:"")+'<hr><a href="#/about">認識點子共玩所</a>';
+  const mi=`<button data-go="#/events">找親子活動</button><button data-go="#/games">找居家遊戲</button>${CATEGORY_LINKS.map(([path,label])=>`<button data-go="#/resources/${path}">${label}</button>`).join("")}`+(AUTH.u?`<button data-go="#/account">我的帳號</button>`:"")+(AUTH.me?.is_admin?`<button data-go="#/admin">管理後台</button>`:"")+'<hr><a href="#/about">認識點子共玩所</a>'+(AUTH.u?`<button data-a="out">登出</button>`:"");
   $("#nav").innerHTML=`<button class="desktop-nav" data-go="#/">首頁</button>${acct}<span class="mwrap"><button class="ic" data-a="menu" aria-label="選單" aria-expanded="false">${MENU_ICON}</button><div class="menu" id="menu">${mi}</div></span>`;
 }
 ACT.shut=()=>{
@@ -970,10 +995,11 @@ function dayLines(e,slots,focus,selectedDay){
   if(e.flex_time)return chosen+"<p>"+esc(dateSpan(e))+" · 時間由家長與主辦方約定</p>";
   if(!focus)return '<p class="mu">近期場次請查主辦方公告。</p>';
   const rest=slots.filter(slot=>slot!==focus);
+  const showAll=slots.length<=4;
   const row=slot=>`<li>${esc(fdate(dateOf(slot.d))+" "+timeText(slot.s,slot.e))} ${bookingBadge(e,slot)}</li>`;
   return `${e.recurrence_note?`<p class="mu">${esc(e.recurrence_note)} · 以已公告的場次為準</p>`:""}
-    <ul class="session-day is-selected" aria-label="優先顯示的場次">${row(focus)}</ul>
-    ${rest.length?`<details class="session-more"><summary>查看其餘 ${rest.length} 場</summary><ul>${rest.map(row).join("")}</ul></details>`:""}`;
+    <ul class="session-day is-selected" aria-label="優先顯示的場次">${showAll?[focus,...rest].map(row).join(""):row(focus)}</ul>
+    ${rest.length&&!showAll?`<details class="session-more"><summary>查看其餘 ${rest.length} 場</summary><ul>${rest.map(row).join("")}</ul></details>`:""}`;
 }
 const EVENT_AGES=[["0–1 歲",0,1],["1–2 歲",1,2],["2–3 歲",2,3],["3–4 歲",3,4],["4–6 歲",4,6],["6 歲以上",6,12],["小一～小二",6,8],["小三～小四",8,10],["小五～小六",10,12]];
 const AGE_PRESETS=[["各年齡",0,12],...EVENT_AGES];
@@ -986,7 +1012,7 @@ const bookingState=(e,slot)=>["cancelled","full","postponed"].includes(e.booking
 const bookingBadge=(e,slot)=>{
   const state=bookingState(e,slot);
   const label=BOOKING[state]||(!slot&&e.schedule?.some(s=>Object.hasOwn(BOOKING,s.booking))?"依場次":"報名待確認");
-  return `<span class="t ${["walkin","open"].includes(state)?"ok":["full","cancelled","postponed"].includes(state)?"event-booking-closed":""}">${label}</span>`;
+  return `<span class="t event-label event-tag-booking ${["full","cancelled","postponed"].includes(state)?"event-booking-closed":""}">${label}</span>`;
 };
 const hasMonths=e=>Number.isInteger(e.age_min_month)&&Number.isInteger(e.age_max_month);
 const ageTxt=e=>hasMonths(e)?`${e.age_min_month}–${e.age_max_month} 個月`:e.age_detail||AGE_PRESETS.find(([,a,b])=>a===e.age_min&&b===e.age_max)?.[0]||(e.age_min===e.age_max?e.age_min+" 歲":e.age_min+"–"+e.age_max+" 歲");
@@ -1006,7 +1032,7 @@ const feeMatches=(e,f)=>{
   return f==="free"?type==="free":f==="paid"?["fixed","range"].includes(type):type!=="announcement"&&e.fee<=+f;
 };
 const nick=e=>e.profiles?.nickname||(e.shared_organizer?"分享者":"主辦方");
-const orgTag=e=>e.shared_organizer?'<span class="t">轉貼他人活動</span>':'<span class="t org">主辦方刊登</span>';
+const orgTag=e=>`<span class="t event-label event-tag-source">${e.shared_organizer?"轉貼他人活動":"主辦方刊登"}</span>`;
 const eventLink=(id,day="",slot="")=>{
   const params=new URLSearchParams();
   if(day)params.set("day",day);
@@ -1330,29 +1356,23 @@ function ecard(e,slots=upcomingSlots(e),home=false){
   const slot=first&&!e.flex_time&&!e.continuous?attendanceKey(first):"";
   const path=eventLink(e.id,first?.d,slot);
   const groups=groupSlots(slots),firstDay=groups[0]?.[1]||[];
-  const times=e.flex_time?`<p class="mu">${esc(dateSpan(e))} · 與主辦方另約時間</p>`:
-    e.continuous?`<p class="mu">${esc(continuousText(e))}</p>`:
-    first?`<div class="event-times">
-      ${firstDay.slice(0,3).map(slot=>esc(timeText(slot.s,slot.e))).join(" · ")}
-      ${firstDay.length>3?`<span class="mu"> · 同日另有 ${firstDay.length-3} 場</span>`:""}
-      ${groups.length>1?`<div class="mu">另有 ${groups.length-1} 天 · ${slots.length-firstDay.length} 場可查看</div>`:""}
-    </div>`:"";
+  const dateLabel=day=>{const d=dateOf(day);return md(d)+"（週"+WK[d.getDay()]+"）"};
+  const dates=groups.length?groups.slice(0,2).map(([day])=>dateLabel(day)).join("、"):md(date)+"（週"+WK[date.getDay()]+"）";
+  const cardDates=e.flex_time||e.continuous?dateSpan(e):dates+(groups.length>2?" · 另 "+(groups.length-2)+" 天":"");
   const venue=[e.city+(e.district||""),e.venue].filter(Boolean).join(" · ");
   const link=eventRegistration(e,first),saved=Boolean(hasE(S.efavs,e.id));
-  const dateBadge=`<div class="dt"><b>${md(date)}</b><span>週${WK[date.getDay()]}</span></div>`;
   const kind=coverKind(e);
   const cover=e.photo?`<div class="${home?"ph ":""}event-cover is-${kind}">
     <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${coverPaths[kind]}</svg>
     ${e.photo?`<img class="card-thumb" loading="lazy" decoding="async" width="500" height="300" src="${esc(pub(e.photo))}" alt="" onerror="this.hidden=true">`:""}
-    ${dateBadge}</div>`:"";
-  return `<article class="${home?"c":"ev"} event-card" data-event-card="${e.id}" data-event-day="${esc(first?.d||"")}" data-event-slot="${esc(slot)}">${cover}
-    <div class="${home?"cb":"eb"}">${!e.photo?`<span class="t event-date-label">${esc(md(date)+"（週"+WK[date.getDay()]+ "）")}</span>`:""}<a class="event-title" href="${path}">${esc(e.title)}</a>
-    <div class="event-summary"><span class="t">${sessionLabel(e)}</span><span class="t ag">${esc(ageTxt(e))}</span><span class="t ${e.fee===0&&(!e.fee_type||e.fee_type==="free")?"ok":""}">${feeTxt(e)}</span>${firstDay.length>1?bookingBadge(e):bookingBadge(e,first)}</div>
-    ${times}${e.recurrence_note?`<div class="mu">${esc(e.recurrence_note)}</div>`:""}<div class="mu event-place">${esc(venue)}</div>
-    <div class="event-links"><a class="b" href="${path}">${slots.length>1&&!e.flex_time&&!e.continuous?"查看場次":"查看活動"}</a>
-      ${link?`<a ${link.infoOnly?"":"data-registration"} href="${esc(e.link)}" target="_blank" rel="noopener noreferrer nofollow ugc">${link.label} ↗</a>`:""}</div>${link?.hint?`<div class="mu">${esc(link.hint)}</div>`:""}
+    </div>`:"";
+  return `<article class="${home?"c":"ev"} event-card" data-event-card="${e.id}" data-event-day="${esc(first?.d||"")}" data-event-slot="${esc(slot)}"><div class="layout-card-date"><span class="t event-date-label">${esc(cardDates)}</span></div>${cover}
+    <div class="${home?"cb":"eb"}"><div class="layout-card-content"><a class="event-title" href="${path}">${esc(e.title)}</a>
+    <div class="event-summary"><span class="t event-label event-tag-session">${sessionLabel(e)}</span><span class="t event-label event-tag-age">${esc(ageTxt(e))}</span><span class="t event-label event-tag-fee">${feeTxt(e)}</span>${firstDay.length>1?bookingBadge(e):bookingBadge(e,first)}</div>
+    ${e.recurrence_note?`<div class="mu">${esc(e.recurrence_note)}</div>`:""}<div class="mu event-place">${esc(venue)}</div></div>
+    <div class="layout-card-actions">${link?`<div class="event-links"><a class="event-official-button" ${link.infoOnly?"":"data-registration"} href="${esc(e.link)}" target="_blank" rel="noopener noreferrer nofollow ugc">${link.label} ↗</a></div>`:""}${link?.hint?`<div class="mu">${esc(link.hint)}</div>`:""}
     <div class="event-card-meta"><span class="mu">瀏覽 <span data-event-views="${e.id}">${Number(e.view_count||0)}</span> 次</span>
-    <button class="event-card-favorite" data-a="e.toggle" data-t="event_favs" data-id="${e.id}" aria-label="收藏 ${esc(e.title)}" aria-pressed="${saved}">${saved?"★ 已收藏":"☆ 收藏"}</button></div></div></article>`;
+    <button class="event-card-favorite" data-a="e.toggle" data-t="event_favs" data-id="${e.id}" aria-label="收藏 ${esc(e.title)}" aria-pressed="${saved}">${saved?"★ 已收藏":"☆ 收藏"}</button></div></div></div></article>`;
 }
 function home(){
   const grp=(k,arr)=>arr.map(([v,t])=>`<button data-a="e.ft" data-k="${k}" data-v="${v}" aria-pressed="${S[k].has(String(v))}" class="${S[k].has(String(v))?"on":""}">${t}</button>`).join("");
@@ -1476,20 +1496,22 @@ function detailHTML(e,quick=false,selectedDay,selectedSlot){
   const programs=category==="exhibition"?S.ev.filter(row=>row.related_exhibition_id===id&&row.status==="approved"&&listingType(row)==="event"&&upcomingSlots(row).length):[];
   return `${quick?"":`<p>${canReview(e)?'<a href="#/admin">← 返回審核</a>':back}</p>`}<div class="card-box"><h2 ${quick?'id="event-quick-title"':""} style="margin:0 0 8px">${esc(e.title)}</h2>
   ${e.status!=="approved"?`<p class="rule">${e.status==="pending"?"審核中，目前只有你和管理員看得到。":"已被退回："+esc(e.reject_reason)+"。修改後可重新送審。"}</p>`:""}
-  <div class="event-detail-meta">${orgTag(e)}<span class="t ag">${esc(ageTxt(e))}</span><span class="t">${AUD[e.audience]||"親子"}</span><span class="t ${e.fee===0&&(!e.fee_type||e.fee_type==="free")?"ok":""}">${feeTxt(e)}</span></div>
+  <div class="event-detail-meta">${orgTag(e)}<span class="t event-label event-tag-age">${esc(ageTxt(e))}</span><span class="t event-label event-tag-audience">${AUD[e.audience]||"親子"}</span><span class="t event-label event-tag-fee">${feeTxt(e)}</span></div>
   ${e.photo?`<img class="big" decoding="async" src="${pub(e.photo)}" alt="" style="max-width:460px">`:""}
-  <section class="detail-block"><h3>${category==="exhibition"?"展期":"場次（台灣時間）"}</h3>
-  ${category==="exhibition"?`<p>${esc(exhibitionDates(e))} ${exhibitionEnded(e)?'<span class="t event-booking-closed">已結束</span>':""}</p>${selectedDay&&selectedDay>=exhibitionPeriod(e)[0]&&selectedDay<=exhibitionPeriod(e)[1]?`<p>想去的日期：${esc(selectedDay)}</p>`:""}`:
-    `<p class="mu">${sessionLabel(e)}</p>${category==="resource"&&(!focus||focus.until<now)?'<p class="mu">近期場次請查主辦方公告。</p>':""}${dayLines(e,slots,focus,selectedDay)}`}</section>
-  <section class="detail-block"><h3>地點與入場</h3>
+  <section class="detail-block"><h3>地點</h3>
   <p>${esc(place)}${e.city===ONLINE?"":` <a href="${e.map_link?esc(e.map_link):"https://www.google.com/maps/search/?api=1&amp;query="+encodeURIComponent(place)}" target="_blank" rel="noopener noreferrer${e.map_link?" nofollow ugc":""}">地圖 ↗</a>`}</p>
-  <p>${feeTxt(e)}${e.fee_type==="range"&&e.fee_max!=null?"（最高 NT$ "+Number(e.fee_max).toLocaleString("zh-TW")+"）":""}${e.fee_note&&!marketAdmission(e)?"（"+esc(e.fee_note)+"）":""}</p>
   ${category==="exhibition"?`<p class="visit-note">${esc(exhibitionVisit(e))}</p>`:""}</section>
+  <section class="detail-block"><h3>費用</h3>
+  <p>${feeTxt(e)}${feeType(e)==="range"&&e.fee_max!=null?"（最高 NT$ "+Number(e.fee_max).toLocaleString("zh-TW")+"）":""}</p></section>
+  ${marketAdmission(e)||e.fee_note?`<section class="detail-block"><h3>費用說明</h3><p class="visit-note">${marketAdmission(e)?"小市集開放給入館民眾，館方公告未另列市集票價。":esc(e.fee_note)}</p></section>`:""}
   <section class="detail-block"><h3>預約與官方公告</h3>
   ${category!=="exhibition"&&e.visit_note?`<p class="visit-note">${esc(e.visit_note)}</p>`:""}
   ${category==="exhibition"?`<p>${bookingBadge(e)}</p>`:""}
   ${e.booking_checked_at?`<p class="mu">報名狀態更新於 ${esc(fdate(taipeiDate(e.booking_checked_at))+" "+hm(taipeiDate(e.booking_checked_at)))}</p>`:""}
-  ${link?`<p><a class="b detail-official" ${link.infoOnly?"":"data-registration"} href="${esc(e.link)}" target="_blank" rel="noopener noreferrer nofollow ugc">${link.label} ↗</a></p>${link.hint?`<p class="mu">${esc(link.hint)}</p>`:""}`:'<p class="mu">詳情請洽主辦方。</p>'}</section>
+  ${link?`<p><a class="event-official-button" ${link.infoOnly?"":"data-registration"} href="${esc(e.link)}" target="_blank" rel="noopener noreferrer nofollow ugc">${link.label} ↗</a></p>${link.hint?`<p class="mu">${esc(link.hint)}</p>`:""}`:'<p class="mu">詳情請洽主辦方。</p>'}</section>
+  <section class="detail-block"><h3>${category==="exhibition"?"展期":"場次（台灣時間）"}</h3>
+  ${category==="exhibition"?`<p>${esc(exhibitionDates(e))} ${exhibitionEnded(e)?'<span class="t event-booking-closed">已結束</span>':""}</p>${selectedDay&&selectedDay>=exhibitionPeriod(e)[0]&&selectedDay<=exhibitionPeriod(e)[1]?`<p>想去的日期：${esc(selectedDay)}</p>`:""}`:
+    `<p class="mu">${sessionLabel(e)}</p>${category==="resource"&&(!focus||focus.until<now)?'<p class="mu">近期場次請查主辦方公告。</p>':""}${dayLines(e,slots,focus,selectedDay)}`}</section>
   ${exhibition?`<p>相關展覽：<a href="${eventLink(exhibition.id)}">${esc(exhibition.title)}</a></p>`:""}
   ${programs.length?`<p><b>展覽相關活動</b></p><ul>${programs.map(row=>`<li><a href="${eventLink(row.id)}">${esc(row.title)}</a></li>`).join("")}</ul>`:""}
   <p><b>活動說明</b><br>${esc(e.description).replace(/\n/g,"<br>")}</p>
