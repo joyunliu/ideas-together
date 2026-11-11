@@ -1802,6 +1802,7 @@ function openWebDraft(link,text=""){
   if(evidence&&evidence.length<=160&&FAMILY_AUDIENCE.test(evidence))item.evidence=evidence;
   const draft=externalDraft(item,new Date().toISOString());
   showLinkedDraft(draft,page);
+  if(page?.warning)showToast(page.warning);
 }
 function linkedEventItem(link,page={}){
   const parse=value=>{
@@ -1834,6 +1835,7 @@ function startLinkedEvent(link,source,page){
   draft.fields=draft.fields.filter(field=>field.value||!["event-age-preset","event-fau"].includes(field.id));
   draft.fields.find(field=>field.id==="event-source").value=source;
   showLinkedDraft(draft,page);
+  if(page?.warning)showToast(page.warning);
 }
 function showLinkedDraft(draft,hasNewData){
   const saved=readDrafts("event").find(row=>row.id===draft.id);
@@ -1869,7 +1871,9 @@ async function readEventLink(link){
   return error?{code:"unavailable"}:data;
 }
 function eventDraftFromText(raw) {
-    const lines=raw.normalize("NFKC").split(/\r?\n/).map(line=>line.trim()).filter(Boolean);
+    const lines=raw.normalize("NFKC").split(/\r?\n/).map(line=>line.trim()
+      .replace(/^(?:[-+•]\s+|\*\s+|#{1,6}\s+)/,"").replace(/\*\*|__/g,"")
+      .replace(/\\+$/,"").trim()).filter(Boolean);
     const field=(pattern)=>lines.map(line=>line.match(pattern)?.[1]).find(Boolean)||"";
     const datePattern=/\b(20\d{2})\s*[-/.年]\s*(\d{1,2})\s*[-/.月]\s*(\d{1,2})(?:日)?/g;
     const datesOf=line=>[...line.matchAll(datePattern)].map(([,year,month,day])=>{
@@ -1879,28 +1883,45 @@ function eventDraftFromText(raw) {
     }).filter(Boolean);
     const dates=[...new Set(lines.flatMap(datesOf))];
     const explicit=lines.filter(line=>/^(?:上午場|下午場|第\s*\d+\s*場|場次)/.test(line));
-    const sessions=(explicit.length?explicit:lines.filter(line=>datesOf(line).length===1)).flatMap(line=>{
+    const timeLines=lines.filter(line=>/^(?:時間|活動時間)\s*:/.test(line));
+    const periodTime=(hour,minute,period)=>{
+      const n=Number(hour);
+      if(n>23||period&&n>12)return "";
+      const normalized=/下午|晚上|pm/i.test(period)?n%12+12:/上午|早上|am/i.test(period)?n%12:n;
+      return String(normalized).padStart(2,"0")+":"+(minute||"00");
+    };
+    const sessions=(explicit.length?explicit:timeLines.length?timeLines:lines.filter(line=>datesOf(line).length===1)).flatMap(line=>{
       const localDates=[...new Set(datesOf(line))];
       const day=localDates.length===1?localDates[0]:!localDates.length&&dates.length===1?dates[0]:"";
       if(!day)return [];
-      return [...line.matchAll(/\b([01]?\d|2[0-3]):([0-5]\d)\s*[-–—~～至]\s*([01]?\d|2[0-3]):([0-5]\d)\b/g)].flatMap(([,h,m,eh,em])=>{
-        const start=day+"T"+h.padStart(2,"0")+":"+m,end=day+"T"+eh.padStart(2,"0")+":"+em;
-        return start<end?[{start,end}]:[];
+      const ranges=/(上午|早上|下午|晚上)?\s*(\d{1,2})(?::([0-5]\d)|點(?:\s*([0-5]?\d)分)?)\s*(am|pm)?\s*[-–—~～至到]\s*(上午|早上|下午|晚上)?\s*(\d{1,2})(?::([0-5]\d)|點(?:\s*([0-5]?\d)分)?)\s*(am|pm)?/gi;
+      return [...line.matchAll(ranges)].flatMap(([,p,h,m,minutes,ap,ep,eh,em,endMinutes,eap])=>{
+        const start=periodTime(h,m||minutes?.padStart(2,"0"),ap||p||ep||eap);
+        const end=periodTime(eh,em||endMinutes?.padStart(2,"0"),eap||ep||ap||p);
+        return start&&end&&start<end?[{start:day+"T"+start,end:day+"T"+end}]:[];
       });
     });
     const feeText=field(/^(?:費用|票價|報名費)\s*:\s*(.+)/);
-    const amount=feeText.match(/^(?:NT\$\s*)?(\d{1,5})\s*元?$/i);
+    const amount=feeText.match(/^(?:NT\$\s*)?(\d{1,5})\s*元?$/i)
+      ||feeText.match(/(?:每組|每人|每場|新台幣|新臺幣|NT\$)\s*(\d{1,5})\s*元?(?!\d)/i);
+    const place=field(/^(?:活動地點|地點|場館)\s*:\s*(.+)/);
+    const location=place.match(/^(.*?)\s*((?:台|臺)北市|(?:台|臺)中市|(?:台|臺)南市|(?:台|臺)東縣|新北市|高雄市|桃園市|[\p{Script=Han}]{2}[縣市])(?=[\p{Script=Han}\d])/u);
+    const oldDates=dates.length>0&&dates.every(day=>day<ymd(taipeiToday()));
+    const intro=lines.findIndex(line=>/^(?:活動簡介|活動說明|活動介紹|簡介)$/.test(line));
+    const description=field(/^(?:活動簡介|活動說明|活動介紹|簡介)\s*:\s*(.+)/)
+      ||(intro>=0?lines.slice(intro+1).filter(line=>!/^(?:時間|活動時間|地點|活動地點|場館|費用|票價|報名費)\s*:/.test(line)).join("\n\n"):"");
     return {
       title:field(/^(?:活動名稱|活動標題|標題)\s*:\s*(.+)/),
-      venue:field(/^(?:活動地點|地點|場館)\s*:\s*(.+)/),
-      address:field(/^地址\s*:\s*(.+)/),
+      venue:location?.[1]?.trim()||place,
+      address:field(/^地址\s*:\s*(.+)/)||(location?place.slice(location.index+location[1].length).trim():""),
       organizer:field(/^(?:主辦單位|主辦方)\s*:\s*(.+)/),
       age:field(/^(?:適合年齡|參加對象|活動對象|對象)\s*:\s*(.+)/),
-      description:field(/^(?:活動說明|活動介紹|簡介)\s*:\s*(.+)/),
+      description,
       fee:/^(免費|免費參加|免費入場)[。！!]?$/u.test(feeText)?0:amount?Number(amount[1]):undefined,
-      fee_note:field(/^費用說明\s*:\s*(.+)/),
+      fee_note:field(/^費用說明\s*:\s*(.+)/)||(amount&&amount[0]!==feeText?feeText:""),
       booking_status:/^(?:已額滿|皆已額滿|全數額滿)$/.test(field(/^報名狀態\s*:\s*(.+)/))?"full":undefined,
-      start:dates.length===1?dates[0]:undefined,sessions
+      start:!oldDates&&dates.length===1?dates[0]:undefined,sessions:oldDates?[]:sessions,
+      warning:oldDates?"公告日期 "+dates.join("、")+" 已過，未帶入場次。請先核對活動年份。":""
     };
   }
 function newEventOptions(){
