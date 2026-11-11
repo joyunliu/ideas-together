@@ -297,7 +297,7 @@ body .event-summary .t.event-booking-closed,body .resource-facts .t.event-bookin
 </style></head><body>
 <div class="w"><nav aria-label="主選單"><a class="brand" href="#/"><h1><svg class="brand-mark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path fill="#f8d47b" d="M8 17v-2a7 7 0 1 1 8 0v2z"/><path d="M9 20h6M10 22h4"/><path fill="#825716" stroke="none" d="M12 13s-4-2.4-4-4.5c0-2 2.7-2.8 4-.8 1.3-2 4-1.2 4 .8 0 2.1-4 4.5-4 4.5z"/></svg><span>點子共玩所<small>Ideas together</small></span></h1></a><div class="r" id="nav"></div><div class="tag">交換遊戲靈感，玩出親子生活的無限可能</div></nav>
 <div id="app"></div>
-<footer class="ft"><a data-go="#/terms">使用條款與免責聲明</a><a data-go="#/privacy">隱私權政策</a><a data-go="#/copyright">著作權與下架申請</a><span>聯絡：ideastogether2026@gmail.com</span></footer></div>
+<footer class="ft"><a href="#/terms">使用條款與免責聲明</a><a href="#/privacy">隱私權政策</a><a href="#/copyright">著作權與下架申請</a><span>聯絡：ideastogether2026@gmail.com</span></footer></div>
 <dialog id="event-quick" class="event-quick" aria-labelledby="event-quick-title">
   <div class="event-quick-head"><a id="event-quick-link">開啟獨立活動頁</a><form method="dialog"><button aria-label="關閉活動詳情" autofocus>×</button></form></div>
   <div class="event-quick-body"></div>
@@ -609,9 +609,9 @@ const need=(type,trigger)=>{if(!AUTH.u){
   submissionIntent=type?{type,trigger}:null;
   authBox();return false
 }if(AUTH.me?.suspended){alert("你的帳號已被停權，無法使用此功能。如有疑問請來信 "+MAIL);return false}return true};
-function authBox(reg){
-  const heading=reg?"註冊":submissionIntent?"登入後分享"+(submissionIntent.type==="game"?"遊戲":"活動"):"登入";
-  modal(`<h3 style="margin-top:0">${heading}</h3>${reg?'<div class="r" style="margin:6px 0 10px"><label style="margin:0;flex:none"><input type="radio" name="at" value="personal" checked style="width:auto;margin:0 4px 0 0">個人</label><label style="margin:0;flex:none"><input type="radio" name="at" value="organization" style="width:auto;margin:0 4px 0 0">商家／機構</label></div><label>暱稱或商家／機構名稱（2–30 字，之後無法修改）<input id="an" maxlength="30"></label><div id="orgx" style="display:none"><label>商家或機構簡介（10–200 字，會顯示在你的活動頁）<textarea id="ab" rows="3" maxlength="200"></textarea></label><label>官方網站（選填）<input id="aw" type="url" maxlength="200" placeholder="https://"></label></div>':""}<label>Email<input id="ae" type="email"></label><label>密碼（至少 6 字）<input id="ap" type="password"></label>${reg?'<input id="hp" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px"><label class="mu" style="display:block;margin-bottom:10px"><input type="checkbox" id="ag" style="width:auto;margin:0 6px 0 0">我已閱讀並同意<a href="games.html#/terms" target="_blank">使用條款與免責聲明</a>及<a href="games.html#/privacy" target="_blank">隱私權政策</a></label>':""}<div id="cf"></div><div class="r"><button class="p" data-a="${reg?"signup":"login"}">${reg?"註冊":"登入"}</button><button data-a="shut">取消</button><a data-a="${reg?"auth":"reg"}">${reg?"已有帳號？登入":"沒有帳號？註冊"}</a>${reg?"":'<a data-a="forgot">忘記密碼？</a>'}</div><div class="mu" id="ae2"></div>`);setTimeout(cfInit,50);document.querySelectorAll("[name=at]").forEach(r=>r.onchange=()=>{const o=$("#orgx");if(o)o.style.display=document.querySelector("[name=at]:checked").value==="organization"?"block":"none"});
+function authBox(reg, purpose=""){
+  const heading=reg?"註冊":submissionIntent?"登入後分享"+(submissionIntent.type==="game"?"遊戲":"活動"):purpose||"登入";
+  modal(`<h3 style="margin-top:0">${heading}</h3>${reg?'<div class="r" style="margin:6px 0 10px"><label style="margin:0;flex:none"><input type="radio" name="at" value="personal" checked style="width:auto;margin:0 4px 0 0">個人</label><label style="margin:0;flex:none"><input type="radio" name="at" value="organization" style="width:auto;margin:0 4px 0 0">商家／機構</label></div><label>暱稱或商家／機構名稱（2–30 字，之後無法修改）<input id="an" maxlength="30"></label><div id="orgx" style="display:none"><label>商家或機構簡介（10–200 字，會顯示在你的活動頁）<textarea id="ab" rows="3" maxlength="200"></textarea></label><label>官方網站（選填）<input id="aw" type="url" maxlength="200" placeholder="https://"></label></div>':""}<label>Email<input id="ae" type="email"></label><label>密碼（至少 6 字）<input id="ap" type="password"></label>${reg?'<input id="hp" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px"><label class="mu" style="display:block;margin-bottom:10px"><input type="checkbox" id="ag" style="width:auto;margin:0 6px 0 0">我已閱讀並同意<a href="#/terms" target="_blank">使用條款與免責聲明</a>及<a href="#/privacy" target="_blank">隱私權政策</a></label>':""}<div id="cf"></div><div class="r"><button class="p" data-a="${reg?"signup":"login"}">${reg?"註冊":"登入"}</button><button data-a="shut">取消</button><a data-a="${reg?"auth":"reg"}">${reg?"已有帳號？登入":"沒有帳號？註冊"}</a>${reg?"":'<a data-a="forgot">忘記密碼？</a>'}</div><div class="mu" id="ae2"></div>`);setTimeout(cfInit,50);document.querySelectorAll("[name=at]").forEach(r=>r.onchange=()=>{const o=$("#orgx");if(o)o.style.display=document.querySelector("[name=at]:checked").value==="organization"?"block":"none"});
 }
 function pwBox(){modal(`<h3 style="margin-top:0">設定新密碼</h3><label>新密碼（至少 6 字）<input id="np" type="password"></label><div class="r"><button class="p" data-a="setpw">更新密碼</button></div><div class="mu" id="ae2"></div>`)}
 
@@ -623,7 +623,7 @@ const CATEGORY_LINKS=[
 const categoryShortcuts=active=>`<div role="navigation" class="category-shortcuts" aria-label="找更多親子內容">${CATEGORY_LINKS.map(([path,,label])=>`<a href="#/resources/${path}" ${active===path?'aria-current="page"':""}>${label}</a>`).join("")}</div>`;
 const pickIcon=kind=>`<svg class="pick-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true">${kind==="events"?'<rect x="3" y="5" width="18" height="16" rx="3" fill="#f8d47b"/><path d="M7 3v5m10-5v5M3 10h18m-14 4h3m4 0h3m-10 3h3"/>':'<path fill="#f8d47b" d="M4 12h16v9H4zM7 12V5h10v7m-7-7V3m4 2V3M8 12v-2m8 2v-2"/><path d="M12 13v8"/>'}</svg>`;
 function nav(){
-  const acct=AUTH.u?`<button data-go="#/account">${esc(AUTH.me?.nickname||"我的帳號")}</button>`:`<button class="p" data-a="auth">登入／註冊</button>`;
+  const acct=AUTH.u?`<button data-go="#/account">${esc(AUTH.me?.nickname||"我的帳號")}</button>`:`<button class="p" data-a="auth">登入</button>`;
   const mi=`<button data-go="#/events">找親子活動</button><button data-go="#/games">找居家遊戲</button>${CATEGORY_LINKS.map(([path,label])=>`<button data-go="#/resources/${path}">${label}</button>`).join("")}`+(AUTH.u?`<button data-go="#/account">我的帳號</button>`:"")+(AUTH.me?.is_admin?`<button data-go="#/admin">管理後台</button>`:"")+(AUTH.u?`<hr><button data-a="out">登出</button>`:"")+'<hr><a href="#/about">認識點子共玩所</a>';
   $("#nav").innerHTML=`<button class="desktop-nav" data-go="#/">首頁</button>${acct}<span class="mwrap"><button class="ic" data-a="menu" aria-label="選單" aria-expanded="false">${MENU_ICON}</button><div class="menu" id="menu">${mi}</div></span>`;
 }
@@ -865,7 +865,7 @@ const REASONS=["內容含促銷或廣告文字","資訊不完整","地點資訊�
 const WK="日一二三四五六";
 const DIST={"基隆市":["仁愛區","信義區","中正區","中山區","安樂區","暖暖區","七堵區"],"台北市":["中正區","大同區","中山區","松山區","大安區","萬華區","信義區","士林區","北投區","內湖區","南港區","文山區"],"新北市":["板橋區","三重區","中和區","永和區","新莊區","新店區","樹林區","鶯歌區","三峽區","淡水區","汐止區","瑞芳區","土城區","蘆洲區","五股區","泰山區","林口區","深坑區","石碇區","坪林區","三芝區","石門區","八里區","平溪區","雙溪區","貢寮區","金山區","萬里區","烏來區"],"桃園市":["桃園區","中壢區","平鎮區","八德區","楊梅區","蘆竹區","大溪區","龍潭區","龜山區","大園區","觀音區","新屋區","復興區"],"新竹市":["東區","北區","香山區"],"新竹縣":["竹北市","竹東鎮","新埔鎮","關西鎮","湖口鄉","新豐鄉","芎林鄉","橫山鄉","北埔鄉","寶山鄉","峨眉鄉","尖石鄉","五峰鄉"],"苗栗縣":["苗栗市","頭份市","竹南鎮","後龍鎮","通霄鎮","苑裡鎮","卓蘭鎮","造橋鄉","西湖鄉","頭屋鄉","公館鄉","銅鑼鄉","三義鄉","大湖鄉","獅潭鄉","三灣鄉","南庄鄉","泰安鄉"],"台中市":["中區","東區","南區","西區","北區","西屯區","南屯區","北屯區","豐原區","東勢區","大甲區","清水區","沙鹿區","梧棲區","后里區","神岡區","潭子區","大雅區","新社區","石岡區","外埔區","大安區","烏日區","大肚區","龍井區","霧峰區","太平區","大里區","和平區"],"彰化縣":["彰化市","員林市","和美鎮","鹿港鎮","溪湖鎮","二林鎮","田中鎮","北斗鎮","花壇鄉","芬園鄉","大村鄉","永靖鄉","伸港鄉","線西鄉","福興鄉","秀水鄉","埔心鄉","埔鹽鄉","大城鄉","芳苑鄉","竹塘鄉","社頭鄉","二水鄉","田尾鄉","埤頭鄉","溪州鄉"],"南投縣":["南投市","埔里鎮","草屯鎮","竹山鎮","集集鎮","名間鄉","鹿谷鄉","中寮鄉","魚池鄉","國姓鄉","水里鄉","信義鄉","仁愛鄉"],"雲林縣":["斗六市","斗南鎮","虎尾鎮","西螺鎮","土庫鎮","北港鎮","古坑鄉","大埤鄉","莿桐鄉","林內鄉","二崙鄉","崙背鄉","麥寮鄉","東勢鄉","褒忠鄉","臺西鄉","元長鄉","四湖鄉","口湖鄉","水林鄉"],"嘉義市":["東區","西區"],"嘉義縣":["太保市","朴子市","布袋鎮","大林鎮","民雄鄉","溪口鄉","新港鄉","六腳鄉","東石鄉","義竹鄉","鹿草鄉","水上鄉","中埔鄉","竹崎鄉","梅山鄉","番路鄉","大埔鄉","阿里山鄉"],"台南市":["中西區","東區","南區","北區","安平區","安南區","永康區","歸仁區","新化區","左鎮區","玉井區","楠西區","南化區","仁德區","關廟區","龍崎區","官田區","麻豆區","佳里區","西港區","七股區","將軍區","學甲區","北門區","新營區","後壁區","白河區","東山區","六甲區","下營區","柳營區","鹽水區","善化區","大內區","山上區","新市區","安定區"],"高雄市":["楠梓區","左營區","鼓山區","三民區","鹽埕區","前金區","新興區","苓雅區","前鎮區","旗津區","小港區","鳳山區","林園區","大寮區","大樹區","大社區","仁武區","鳥松區","岡山區","橋頭區","燕巢區","田寮區","阿蓮區","路竹區","湖內區","茄萣區","永安區","彌陀區","梓官區","旗山區","美濃區","六龜區","甲仙區","杉林區","內門區","茂林區","桃源區","那瑪夏區"],"屏東縣":["屏東市","潮州鎮","東港鎮","恆春鎮","萬丹鄉","長治鄉","麟洛鄉","九如鄉","里港鄉","鹽埔鄉","高樹鄉","萬巒鄉","內埔鄉","竹田鄉","新埤鄉","枋寮鄉","新園鄉","崁頂鄉","林邊鄉","南州鄉","佳冬鄉","琉球鄉","車城鄉","滿州鄉","枋山鄉","三地門鄉","霧台鄉","瑪家鄉","泰武鄉","來義鄉","春日鄉","獅子鄉","牡丹鄉"],"宜蘭縣":["宜蘭市","羅東鎮","蘇澳鎮","頭城鎮","礁溪鄉","壯圍鄉","員山鄉","冬山鄉","五結鄉","三星鄉","大同鄉","南澳鄉"],"花蓮縣":["花蓮市","鳳林鎮","玉里鎮","新城鄉","吉安鄉","壽豐鄉","光復鄉","豐濱鄉","瑞穗鄉","富里鄉","秀林鄉","萬榮鄉","卓溪鄉"],"台東縣":["台東市","成功鎮","關山鎮","卑南鄉","大武鄉","太麻里鄉","東河鄉","長濱鄉","鹿野鄉","池上鄉","綠島鄉","延平鄉","海端鄉","達仁鄉","金峰鄉","蘭嶼鄉"],"澎湖縣":["馬公市","湖西鄉","白沙鄉","西嶼鄉","望安鄉","七美鄉"],"金門縣":["金城鎮","金湖鎮","金沙鎮","金寧鄉","烈嶼鄉","烏坵鄉"],"連江縣":["南竿鄉","北竿鄉","莒光鄉","東引鄉"]};
 function fillDist(cur){const l=DIST[$("#event-fc").value]||[],o=cur&&!l.includes(cur)?[...l,cur]:l;$("#event-fz").innerHTML='<option value="">不指定</option>'+o.map(d=>`<option ${d===cur?"selected":""}>${esc(d)}</option>`).join("")}
-const S={get u(){return AUTH.u},get me(){return AUTH.me},ev:[],elikes:[],efavs:[],favOnly:false,q:"",city:new Set(),age:new Set(),fee:new Set(),when:new Set(),org:new Set(),aud:new Set(),tod:new Set(),booking:new Set(),sessionType:new Set(),sort:"soon",showAll:false,view:"list",advOpen:false,month:new Date(),day:null};
+const S={get u(){return AUTH.u},get me(){return AUTH.me},ev:[],elikes:[],efavs:[],favOnly:false,q:"",city:new Set(),age:new Set(),fee:new Set(),when:new Set(),org:new Set(),aud:new Set(),tod:new Set(),booking:new Set(),sessionType:new Set(),sort:"soon",view:"list",advOpen:false,month:new Date(),day:null};
 const d0=d=>new Date(d.getFullYear(),d.getMonth(),d.getDate());
 const ymd=d=>d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
 const taipeiDate=value=>{
@@ -990,8 +990,10 @@ const bookingBadge=(e,slot)=>{
 };
 const hasMonths=e=>Number.isInteger(e.age_min_month)&&Number.isInteger(e.age_max_month);
 const ageTxt=e=>hasMonths(e)?`${e.age_min_month}–${e.age_max_month} 個月`:e.age_detail||AGE_PRESETS.find(([,a,b])=>a===e.age_min&&b===e.age_max)?.[0]||(e.age_min===e.age_max?e.age_min+" 歲":e.age_min+"–"+e.age_max+" 歲");
-const feeType=e=>e.fee_type||(e.fee==null?"announcement":e.fee===0?"free":"fixed");
+const feeType=e=>marketAdmission(e)?"announcement":e.fee_type||(e.fee==null?"announcement":e.fee===0?"free":"fixed");
+const marketAdmission=e=>e.id==="3a32c867-2cf9-48d3-b4a3-68652b3aec95"&&e.fee===120;
 const feeTxt=e=>{
+  if(marketAdmission(e))return "需入館・票價依館方公告";
   const type=feeType(e);
   if(type==="free")return "免費";
   if(type==="announcement")return "費用依公告";
@@ -1121,8 +1123,10 @@ const act={
     const{error}=await sb.auth.updateUser({password:p});if(error)return $("#ae2").textContent="更新失敗："+zh(error);shut();alert("密碼已更新。");location.hash="#/"},
   async out(){await sb.auth.signOut();location.hash="#/"},
   async toggle(el){
+    const {t,id}=el.dataset;
+    if(!AUTH.u&&t==="event_favs"){authBox(false,"登入後收藏這個活動");return}
     if(!need())return;
-    const {t,id}=el.dataset,uid=S.u.id,hash=location.hash;
+    const uid=S.u.id,hash=location.hash;
     const arr=t==="event_likes"?S.elikes:S.efavs,on=hasE(arr,id);
     const row={event_id:id,user_id:uid},pendingKey=t+":"+uid+":"+id;
     if(pendingEventReactions.has(pendingKey))return;
@@ -1196,6 +1200,11 @@ const act={
     }
     draw();
   },
+  weekend(){
+    S.when.delete("today");
+    act.ft({dataset:{k:"when",v:"weekend"}});
+    $("#event-list").focus({preventScroll:true});
+  },
   more(){
     S.advOpen=!S.advOpen;
     $("#event-more-filters").hidden=!S.advOpen;
@@ -1203,15 +1212,7 @@ const act={
   },
   sort(el){S.sort=el.dataset.v;draw()},
   view(el){S.view=el.dataset.v;draw()},
-  all(){
-    S.showAll=!S.showAll;
-    draw();
-    if(S.showAll){
-      const next=$("#el article:nth-child(4) .event-title");
-      next?.focus({preventScroll:true});
-      next?.scrollIntoView({block:"nearest"});
-    }
-  },
+
   clr(){["city","age","fee","when","org","aud","tod","booking","sessionType"].forEach(k=>S[k].clear());S.q="";S.day=null;S.favOnly=false;home()},
   day(el){
     const k=el.dataset.k;
@@ -1332,10 +1333,9 @@ function ecard(e,slots=upcomingSlots(e),home=false){
   const times=e.flex_time?`<p class="mu">${esc(dateSpan(e))} · 與主辦方另約時間</p>`:
     e.continuous?`<p class="mu">${esc(continuousText(e))}</p>`:
     first?`<div class="event-times">
-      <b>${esc(md(date)+"（週"+WK[date.getDay()]+"）")}</b>
       ${firstDay.slice(0,3).map(slot=>esc(timeText(slot.s,slot.e))).join(" · ")}
       ${firstDay.length>3?`<span class="mu"> · 同日另有 ${firstDay.length-3} 場</span>`:""}
-      ${groups.length>1?`<div class="mu">另有 ${groups.length-1} 天 · ${slots.length} 場可查看</div>`:""}
+      ${groups.length>1?`<div class="mu">另有 ${groups.length-1} 天 · ${slots.length-firstDay.length} 場可查看</div>`:""}
     </div>`:"";
   const venue=[e.city+(e.district||""),e.venue].filter(Boolean).join(" · ");
   const link=eventRegistration(e,first),saved=Boolean(hasE(S.efavs,e.id));
@@ -1371,9 +1371,9 @@ function home(){
   <div class="filter-label">活動來源</div><div class="filter-row">${grp("org",[["personal","個人主辦"],["organization","商家／機構主辦"],["shared","轉貼他人活動"]])}</div></div>
   </div>
   <div class="r event-list-actions event-view-controls"><div class="r" role="group" aria-label="顯示方式"><button data-a="e.view" data-v="list" aria-controls="event-list">列表</button><button data-a="e.view" data-v="calendar" aria-controls="event-calendar">月曆</button></div><div class="r" id="event-sort" role="group" aria-label="活動排序"><button data-a="e.sort" data-v="soon">即將到來</button><button data-a="e.sort" data-v="new">最新活動</button></div></div>
-  <section class="discovery-results" id="event-list" tabindex="-1" aria-label="活動列表"><div class="filter-actions"><span class="filter-count" id="fcount" aria-live="polite"></span><button data-a="e.clr">清除所有篩選</button></div><div class="filter-chips" id="active-event-filters"></div>
+  <section class="discovery-results" id="event-list" tabindex="-1" aria-label="活動列表"><div class="filter-actions"><span class="filter-count" id="fcount" aria-live="polite"></span><button id="event-clear" data-a="e.clr">清除所有篩選</button></div><div class="filter-chips" id="active-event-filters"></div>
   <section class="calendar-panel" id="event-calendar" aria-labelledby="event-calendar-title"><h3 id="event-calendar-title">活動月曆</h3><p class="mu" style="margin:0 0 10px">點選有活動的日期可查看當天的列表。</p><div class="card-box" id="cal"></div></section>
-  <div id="event-cards" tabindex="-1"><div id="el"></div><div class="r event-list-actions"><button id="event-show-all" data-a="e.all" aria-controls="el"></button></div></div></section>`;
+  <div id="event-cards" tabindex="-1"><div id="el"></div></div></section>`;
   document.querySelectorAll("[data-event-picker]").forEach(el=>{el.onchange=()=>act.pick(el)});
   $("#event-browse-date").onchange=event=>{
     const picker=event.currentTarget;
@@ -1420,17 +1420,16 @@ function draw(){
     const selected=el.dataset.k?S[el.dataset.k].has(el.dataset.v):S.favOnly;
     el.classList.toggle("on",selected);el.setAttribute("aria-pressed",selected);
   });
-  const showAll=$("#event-show-all");
-  showAll.hidden=l.length<=3;
-  showAll.textContent=S.showAll?"只顯示前三筆":`顯示全部 ${l.length} 筆`;
-  showAll.setAttribute("aria-expanded",String(S.showAll));
-  const visible=S.showAll?l:l.slice(0,3);
-  $("#fcount").textContent=(S.view==="calendar"?`找到 ${l.length} 筆活動`:`顯示 ${visible.length}／${l.length} 筆`)+(S.day?" · "+S.day.replace(/-/g,"/"):"");
-  $("#el").innerHTML=(S.day?'<div class="r"><button data-a="e.day" data-k="">顯示全部日期</button></div>':"")+(visible.length?
-    `<div class="home-mini-grid">${visible.map(({event,slots})=>ecard(event,slots,true)).join("")}</div>`:
-    `<div class="empty-state"><strong>${active.length||S.day?"找不到符合條件的活動":"目前沒有即將舉辦的活動"}</strong>
-    <p>${active.length||S.day?"試著調整日期、地點或關鍵字。":"歡迎分享即將舉辦的親子活動。"}</p>
-    ${active.length||S.day?'<button data-a="e.clr">清除所有篩選</button>':'<button class="p" data-a="e.new">＋ 分享活動</button>'}</div>`);
+  const filtered=active.length>0;
+  const emptyList=S.view==="list"&&!l.length;
+  $("#event-clear").hidden=!filtered||emptyList;
+  $("#fcount").textContent=emptyList?"":`找到 ${l.length} 筆活動`+(S.day?" · "+S.day.replace(/-/g,"/"):"");
+  $("#el").innerHTML=(S.day?'<div class="r"><button data-a="e.day" data-k="">顯示全部日期</button></div>':"")+(l.length?
+    `<div class="home-mini-grid">${l.map(({event,slots})=>ecard(event,slots,true)).join("")}</div>`:
+    `<div class="empty-state"><strong>${S.when.size===1&&S.when.has("today")?"今天沒有符合條件的活動":filtered?"找不到符合條件的活動":"目前沒有即將舉辦的活動"}</strong>
+    <p>${filtered?"試著調整日期、地點或關鍵字。":"歡迎分享即將舉辦的親子活動。"}</p>
+    ${filtered?'<button data-a="e.clr">清除所有篩選</button>':'<button class="p" data-a="e.new">＋ 分享活動</button>'}
+    ${S.when.size===1&&S.when.has("today")?'<button data-a="e.weekend">看本週末</button>':""}</div>`);
 }
 async function updateEventViews(e){
   const count=await trackView("event",e.id,e);
@@ -1484,7 +1483,7 @@ function detailHTML(e,quick=false,selectedDay,selectedSlot){
     `<p class="mu">${sessionLabel(e)}</p>${category==="resource"&&(!focus||focus.until<now)?'<p class="mu">近期場次請查主辦方公告。</p>':""}${dayLines(e,slots,focus,selectedDay)}`}</section>
   <section class="detail-block"><h3>地點與入場</h3>
   <p>${esc(place)}${e.city===ONLINE?"":` <a href="${e.map_link?esc(e.map_link):"https://www.google.com/maps/search/?api=1&amp;query="+encodeURIComponent(place)}" target="_blank" rel="noopener noreferrer${e.map_link?" nofollow ugc":""}">地圖 ↗</a>`}</p>
-  <p>${feeTxt(e)}${e.fee_type==="range"&&e.fee_max!=null?"（最高 NT$ "+Number(e.fee_max).toLocaleString("zh-TW")+"）":""}${e.fee_note?"（"+esc(e.fee_note)+"）":""}</p>
+  <p>${feeTxt(e)}${e.fee_type==="range"&&e.fee_max!=null?"（最高 NT$ "+Number(e.fee_max).toLocaleString("zh-TW")+"）":""}${e.fee_note&&!marketAdmission(e)?"（"+esc(e.fee_note)+"）":""}</p>
   ${category==="exhibition"?`<p class="visit-note">${esc(exhibitionVisit(e))}</p>`:""}</section>
   <section class="detail-block"><h3>預約與官方公告</h3>
   ${category!=="exhibition"&&e.visit_note?`<p class="visit-note">${esc(e.visit_note)}</p>`:""}
@@ -2803,9 +2802,13 @@ document.addEventListener("keydown",e=>{
   if(e.key!=="Escape")return;
   if($("#md").classList.contains("s"))ACT.shut();
   $("#menu")?.classList.remove("s");
+  $('[data-a="menu"]')?.setAttribute("aria-expanded","false");
 });
 document.addEventListener("click",e=>{
-  if(!e.target.closest('[data-a="menu"]')){const mn=$("#menu");if(mn)mn.classList.remove("s")}
+  if(!e.target.closest('[data-a="menu"]')&&$("#menu")?.classList.contains("s")){
+    $("#menu").classList.remove("s");
+    $('[data-a="menu"]')?.setAttribute("aria-expanded","false");
+  }
   const eventCard=e.target.closest("[data-event-card]"),eventAnchor=e.target.closest("a");
   if(eventAnchor?.matches("[data-registration]")&&!/^#\/(account|admin)(?:[/?]|$)/.test(location.hash))analytics.event("click_registration");
   const plainClick=!e.defaultPrevented&&e.button===0&&!e.metaKey&&!e.ctrlKey&&!e.shiftKey&&!e.altKey;
