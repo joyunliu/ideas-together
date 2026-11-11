@@ -2524,18 +2524,19 @@ ACT["x.importculture"]=()=>E.importCulture();
 ACT["x.webCandidates"]=async()=>{
   const uid=AUTH.u?.id;
   if(!AUTH.me?.is_admin||AUTH.me.suspended)return;
-  modal('<h3>網路搜尋候選</h3><p id="web-candidates-status" class="mu" role="status">讀取中…</p><div id="web-candidates"></div>');
+  modal('<h3>網路搜尋候選</h3><button id="web-candidates-refresh" class="p" type="button">立即更新來源</button><p class="mu">查詢文化部全國親子活動及臺北市政府公開活動。</p><p id="web-candidates-status" class="mu" role="status">讀取中…</p><div id="web-candidates"></div>');
   const status=$("#web-candidates-status"),list=$("#web-candidates");
+  const refresh=$("#web-candidates-refresh");
   const allowed=()=>status.isConnected&&AUTH.u?.id===uid&&AUTH.me?.is_admin&&!AUTH.me.suspended;
-  const {data,error}=await sb.rpc("list_web_activity_candidates");
-  if(!allowed())return;
-  if(error){
-    status.textContent="目前無法讀取網路候選，請稍後再試。";
-    list.innerHTML='<button data-a="x.webCandidates">重試</button>';
-    return;
-  }
-  status.textContent=data.length?`找到 ${data.length} 筆待核對候選，請到來源確認最新的場次與報名資訊。`:"目前沒有新的網路搜尋候選。";
-  list.innerHTML=data.map((row,i)=>{
+  let saved=[],latest=[];
+  function render(){
+    const known=new Set(E.S.ev.filter(e=>["pending","approved"].includes(e.status)).map(e=>importURL(e.link)));
+    const unique=new Map(saved.map(row=>[row.source_url,row]));
+    for(const row of latest){
+      if(!known.has(row.source_url)&&!unique.has(row.source_url))unique.set(row.source_url,row);
+    }
+    const data=[...unique.values()].sort((a,b)=>a.first_day.localeCompare(b.first_day));
+    list.innerHTML=data.map((row,i)=>{
     const url=importURL(row.source_url);
     return url?`<article class="cm"><b>${esc(row.title)}</b>
       <p class="mu">${esc(row.first_day)}${row.first_day===row.last_day?"":" ～ "+esc(row.last_day)} · ${esc([row.city,row.venue].filter(Boolean).join(" "))}</p>
@@ -2548,6 +2549,44 @@ ACT["x.webCandidates"]=async()=>{
     const row=data[Number(button.dataset.webIndex)];
     E.openWebDraft(importURL(row.source_url),row);
   });
+    return data.length;
+  }
+  refresh.onclick=async()=>{
+    if(!allowed()||refresh.disabled)return;
+    refresh.disabled=true;
+    status.textContent="正在查詢來源…";
+    try{
+      const {data,error}=await sb.functions.invoke("refresh-web-candidates",{body:{}});
+      if(!allowed())return;
+      if(error||!Array.isArray(data?.rows))throw new Error("source unavailable");
+      latest=data.rows;
+      const count=render();
+      const added=latest.filter(row=>!saved.some(item=>item.source_url===row.source_url)&&
+        !E.S.ev.some(event=>["pending","approved"].includes(event.status)&&importURL(event.link)===row.source_url)).length;
+      const time=new Date(data.updated_at).toLocaleTimeString("zh-TW",{timeZone:"Asia/Taipei",hour:"2-digit",minute:"2-digit"});
+      status.textContent=`${time} 已更新，檢查 ${data.checked} 筆來源資料。${added?`找到 ${added} 筆候選`:"這次沒有符合條件的新候選"}${count?`，清單共 ${count} 筆待核對`:""}。`;
+      if(data.national_source==="snapshot")status.textContent+=" 全國即時來源暫時無法讀取，已使用最近一次成功取得的資料。";
+      if(data.national_source==="unavailable")status.textContent+=" 全國來源暫時無法讀取，本次只有臺北市補充資料。";
+      if(data.taipei_source===false)status.textContent+=" 臺北市補充來源暫時無法讀取。";
+    }catch{
+      if(allowed())status.textContent="目前無法更新來源，原有候選仍可查看。請稍後再試。";
+    }finally{
+      if(allowed())refresh.disabled=false;
+    }
+  };
+  refresh.disabled=true;
+  try{
+    const {data,error}=await sb.rpc("list_web_activity_candidates").abortSignal(AbortSignal.timeout(8000));
+    if(!allowed())return;
+    if(error)throw error;
+    saved=data||[];
+    const count=render();
+    status.textContent=count?`找到 ${count} 筆待核對候選，請確認場次與報名資訊。`:"目前沒有新的網路搜尋候選，可以按「立即更新來源」。";
+  }catch{
+    if(allowed())status.textContent="目前無法讀取既有候選，可以按「立即更新來源」查詢。";
+  }finally{
+    if(allowed())refresh.disabled=false;
+  }
 };
 ACT["x.webLink"]=()=>{
   if(!AUTH.me?.is_admin||AUTH.me.suspended)return;
