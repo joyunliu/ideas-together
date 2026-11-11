@@ -302,6 +302,9 @@ body .t.event-label,body .event-summary .t.event-label{background:var(--label-bg
   .event-tag-audience{--label-bg:#243f39;--label-text:#bce9df}
   .event-tag-booking.event-booking-closed{--label-bg:#532f32;--label-text:#ffc8ca}
 }
+.next-view-controls{justify-content:space-between;align-items:center;gap:4px 12px}.next-view-controls>button{margin-inline-start:auto}.next-resource-date{font-weight:700;color:var(--ac-dark)}
+.resource-grid:has(> .next-resource-card){grid-template-columns:minmax(0,1fr)}.resource-grid>.next-resource-card{background:var(--card);display:grid;gap:10px}.next-resource-card h3,.next-resource-card p{margin:0 0 5px}.home-more h3{margin:0 0 5px;font-size:16px}
+@media(min-width:761px){.resource-grid>.next-resource-card{grid-template-columns:minmax(0,1fr) auto;align-items:end;gap:20px}.next-resource-actions{justify-self:end}}
 </style></head><body>
 <div class="w"><nav aria-label="主選單"><a class="brand" href="#/"><h1><svg class="brand-mark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path fill="#f8d47b" d="M8 17v-2a7 7 0 1 1 8 0v2z"/><path d="M9 20h6M10 22h4"/><path fill="#825716" stroke="none" d="M12 13s-4-2.4-4-4.5c0-2 2.7-2.8 4-.8 1.3-2 4-1.2 4 .8 0 2.1-4 4.5-4 4.5z"/></svg><span>點子共玩所<small>Ideas together</small></span></h1></a><div class="r" id="nav"></div><div class="tag">交換遊戲靈感，玩出親子生活的無限可能</div></nav>
 <div id="app"></div>
@@ -1215,6 +1218,13 @@ const act={
   },
   sort(el){S.sort=el.dataset.v;draw()},
   view(el){S.view=el.dataset.v;draw()},
+  rand(){
+    const rows=onSelectedDay(list());
+    if(!rows.length)return showToast("目前沒有符合條件的活動。");
+    const {event,slots:[first]}=rows[Math.floor(Math.random()*rows.length)];
+    return openQuick(event.id,first.d,event.flex_time||event.continuous?"":attendanceKey(first));
+  },
+
 
   clr(){["city","age","fee","when","org","aud","tod","booking","sessionType"].forEach(k=>S[k].clear());S.q="";S.day=null;S.favOnly=false;home()},
   day(el){
@@ -1349,8 +1359,8 @@ function ecard(e,slots=upcomingSlots(e),home=false){
 function home(){
   const grp=(k,arr)=>arr.map(([v,t])=>`<button data-a="e.ft" data-k="${k}" data-v="${v}" aria-pressed="${S[k].has(String(v))}" class="${S[k].has(String(v))?"on":""}">${t}</button>`).join("");
   const picker=(k,label,items)=>`<select data-event-picker data-k="${k}" aria-label="${label}"><option value="">${label}</option>${items.map(([v,t])=>`<option value="${esc(v)}">${esc(t)}</option>`).join("")}</select>`;
-  $("#app").innerHTML=`<div class="section-head hrow event-browse-head"><h2>找親子活動</h2><div class="r"><button class="p" data-a="e.new">＋ 分享活動</button></div></div><p class="mu" style="margin:-4px 8px 12px">查看單場與短期親子活動，依地點、年齡、費用與時間篩選。報名與活動詳情請以主辦方公告為準。</p>
-  ${categoryShortcuts()}<div class="filter-panel event-search-panel"><div class="search-wrap"><input id="q" type="search" aria-label="搜尋活動" placeholder="搜尋活動名稱、說明或地點…" value="${esc(S.q)}"></div>
+  $("#app").innerHTML=`<div class="section-head hrow event-browse-head"><h2>找親子活動</h2><div class="r"><button class="p" data-a="e.new">＋ 分享活動</button><button data-a="e.rand">隨機找活動</button></div></div><p class="mu" style="margin:-4px 8px 12px">查看單場與短期親子活動，依地點、年齡、費用與時間篩選。報名與活動詳情請以主辦方公告為準。</p>
+  <div class="filter-panel event-search-panel"><div class="search-wrap"><input id="q" type="search" aria-label="搜尋活動" placeholder="搜尋活動名稱、說明或地點…" value="${esc(S.q)}"></div>
   <div class="event-search-controls"><div class="event-quick-dates">${grp("when",[["today","今天"],["weekend","本週末"]])}<label class="event-date-picker"><span id="event-browse-date-label" aria-hidden="true">選日期</span><input id="event-browse-date" type="date" aria-label="選日期" min="${ymd(taipeiToday())}"></label></div>
   <div class="event-filter-quick">${picker("city","地區",[ONLINE,...CITIES].map(c=>[c,c]))}${picker("age","年齡",EVENT_AGES.map(([label],i)=>[i,label]))}<button id="event-more-toggle" data-a="e.more" aria-expanded="${S.advOpen}" aria-controls="event-more-filters">更多篩選</button></div></div>
   <div class="event-more-filters" id="event-more-filters" ${S.advOpen?"":"hidden"}>
@@ -1362,7 +1372,7 @@ function home(){
   <div class="filter-label">參與對象</div><div class="filter-row">${grp("aud",[["family","親子"],["kids","只有孩子"],["parents","只有家長"]])}</div>
   <div class="filter-label">活動來源</div><div class="filter-row">${grp("org",[["personal","個人主辦"],["organization","商家／機構主辦"],["shared","轉貼他人活動"]])}</div></div>
   </div>
-  <div class="r event-list-actions event-view-controls"><div class="r" role="group" aria-label="顯示方式"><button data-a="e.view" data-v="list" aria-controls="event-list">列表</button><button data-a="e.view" data-v="calendar" aria-controls="event-calendar">月曆</button></div><div class="r" id="event-sort" role="group" aria-label="活動排序"><button data-a="e.sort" data-v="soon">即將到來</button><button data-a="e.sort" data-v="new">最新活動</button></div></div>
+  <div class="r event-list-actions event-view-controls next-view-controls"><div class="r" id="event-sort" role="group" aria-label="列表排序"><span class="mu">列表排序</span><button data-a="e.sort" data-v="soon">即將到來</button><button data-a="e.sort" data-v="new">最新活動</button></div><button id="event-view-toggle" data-a="e.view" data-v="calendar" aria-controls="event-calendar">切換到月曆</button></div>
   <section class="discovery-results" id="event-list" tabindex="-1" aria-label="活動列表"><div class="filter-actions"><span class="filter-count" id="fcount" aria-live="polite"></span><button id="event-clear" data-a="e.clr">清除所有篩選</button></div><div class="filter-chips" id="active-event-filters"></div>
   <section class="calendar-panel" id="event-calendar" aria-labelledby="event-calendar-title"><h3 id="event-calendar-title">活動月曆</h3><p class="mu" style="margin:0 0 10px">點選有活動的日期可查看當天的列表。</p><div class="card-box" id="cal"></div></section>
   <div id="event-cards" tabindex="-1"><div id="el"></div></div></section>`;
@@ -1377,14 +1387,22 @@ function home(){
   let searchTimer;
   bindSearch($("#q"),q=>{S.q=q;clearTimeout(searchTimer);if(q.trim())searchTimer=setTimeout(()=>{if(location.hash.split("?")[0]==="#/events")analytics.event("search_activity",{method:"keyword"})},650)},draw);draw();
 }
+function onSelectedDay(rows){
+  if(!S.day)return [...rows];
+  return rows.map(({event,slots})=>({event,slots:slots.filter(slot=>slot.d===S.day)})).filter(row=>row.slots.length);
+}
 function draw(){
   $("#event-browse-date").value=S.day||"";
   $("#event-browse-date-label").textContent=S.day?md(dateOf(S.day)):"選日期";
   const base=list();
-  const l=S.day?base.map(({event,slots})=>({event,slots:slots.filter(slot=>slot.d===S.day)})).filter(row=>row.slots.length):[...base];
+  const l=onSelectedDay(base);
   if(S.day)l.sort((a,b)=>a.slots[0].s.localeCompare(b.slots[0].s));
   else if(S.sort==="new")l.sort((a,b)=>Date.parse(b.event.created_at)-Date.parse(a.event.created_at));
-  $("#event-sort").hidden=!!S.day;
+  $("#event-sort").hidden=S.view==="calendar"||!!S.day;
+  const viewToggle=$("#event-view-toggle");
+  viewToggle.dataset.v=S.view==="calendar"?"list":"calendar";
+  viewToggle.textContent=S.view==="calendar"?"返回列表":"切換到月曆";
+  viewToggle.setAttribute("aria-controls",S.view==="calendar"?"event-list":"event-calendar");
   document.querySelectorAll("[data-a='e.sort']").forEach(button=>{
     const selected=!S.day&&button.dataset.v===S.sort;
     button.classList.toggle("on",selected);button.setAttribute("aria-pressed",selected);
@@ -1394,11 +1412,6 @@ function draw(){
   if(S.view==="calendar")$("#cal").innerHTML=cal(base);
   document.querySelectorAll("[data-event-picker]").forEach(el=>{
     el.value=el.dataset.k==="city"?[...S.city][0]||"":"";
-  });
-  document.querySelectorAll("[data-a='e.view']").forEach(button=>{
-    const selected=button.dataset.v===S.view;
-    button.classList.toggle("on",selected);
-    button.setAttribute("aria-pressed",String(selected));
   });
   const active=[],labels={today:"今天",weekend:"本週末","7d":"7 天內",month:"本月",am:"早上",pm:"下午",ev:"晚上",free:"免費",paid:"付費",family:"親子",kids:"只有孩子",parents:"只有家長",personal:"個人主辦",organization:"商家／機構主辦",shared:"轉貼他人活動",flex:"可自行預約",500:"500 元以內",1000:"1000 元以內"};
   for(const k of ["when","city","age","fee","org","aud","tod","booking","sessionType"]){
@@ -1594,7 +1607,7 @@ function form(e,draft,template,append=false,adminEdit=false){
   <label>活動說明<textarea id="event-fh" rows="6" maxlength="800">${esc(e?.description)}</textarea></label>
   <label>開放時間、休館日或預約方式（資源與展覽適用）<textarea id="event-visit-note" rows="2" maxlength="240">${esc(e?.visit_note)}</textarea></label>
   <label>相關展覽（短期導覽或工作坊適用）<select id="event-related-exhibition"><option value="">不指定</option>${S.ev.filter(row=>row.id!==e?.id&&row.status==="approved"&&listingType(row)==="exhibition").map(row=>`<option value="${row.id}" ${row.id===e?.related_exhibition_id?"selected":""}>${esc(row.title)}</option>`).join("")}</select></label>
-  <label><span id="event-link-label"></span><input id="event-fl" type="url" maxlength="200" placeholder="https://" value="${esc(e?.link)}"></label>
+  <label><span id="event-link-label"></span><input id="event-fl" type="url" maxlength="1000" placeholder="https://" value="${esc(e?.link)}"></label>
   </section><section class="post-step" hidden><h4 tabindex="-1">照片與送審</h4><p class="post-preview"></p>
   ${imported?`<label>來源明確標示的參加對象（必填）<input id="event-audience-evidence" maxlength="160" placeholder="例如：親子 1 大 1 小，孩子須滿 6 歲" value="${esc(imported.evidence)}"></label>
   <label><input id="event-confirm-availability" type="checkbox" style="width:auto"> 我已核對參加對象與場次，並依來源可查到的資訊填寫報名狀態</label>`:""}
@@ -1759,7 +1772,7 @@ function externalDraft(item,createdAt){
   add("fv",item.venue.slice(0,60));
   add("fad",item.address.slice(0,100));
   const registration=importURL(details.registration_url)||item.link;
-  add("fl",registration.length<=200?registration:"","url");
+  add("fl",registration.length<=1000?registration:"","url");
   const hasAges=[details.age_min,details.age_max].every(age=>Number.isInteger(age)&&age>=0&&age<=12)&&details.age_min<=details.age_max;
   add("age-preset",hasAges?agePreset(details.age_min,details.age_max):"","select-one");
   if(hasAges){add("fa1",String(details.age_min),"select-one");add("fa2",String(details.age_max),"select-one")}
@@ -1767,6 +1780,8 @@ function externalDraft(item,createdAt){
   add("fau",Object.hasOwn(AUD,details.audience)?details.audience:"","select-one");
   add("booking",Object.hasOwn(BOOKING,details.booking_status)?details.booking_status:"","select-one");
   add("ff",Number.isInteger(details.fee)&&details.fee>=0&&details.fee<=100000?String(details.fee):/^\d{1,5}$/.test(item.price)?item.price:/^(免費|免費入場|免費參加)[。！!]?$/.test(item.price)?"0":"","number");
+  if(details.fee===0)add("fee-type","free","select-one");
+  else if(Number.isInteger(details.fee)&&details.fee>0)add("fee-type","fixed","select-one");
   add("fn",cultureText(details.fee_note).slice(0,60));
   add("fh",cultureText(details.description).slice(0,800),"textarea");
   if(slots.length){
@@ -1808,7 +1823,7 @@ function linkedEventItem(link,page={}){
   const address=cultureDescription(page.address),place=eventPlaceFromAddress(address);
   return {web:true,link,title:cultureDescription(page.title),first:start.day||"",last:end.day||start.day||"",
     single,online:page.online===true,organizer:cultureDescription(page.organizer),venue:cultureDescription(page.venue),address,
-    ...place,price:"",details:{description:cultureDescription(page.description),age_detail:cultureDescription(page.age),fee:page.fee,schedule}};
+    ...place,price:"",details:{description:cultureDescription(page.description),age_detail:cultureDescription(page.age),fee:page.fee,fee_note:page.fee_note,booking_status:page.booking_status,schedule}};
 }
 function startLinkedEvent(link,source,page){
   const {culture,...draft}=externalDraft(linkedEventItem(link,page),new Date().toISOString());
@@ -1817,8 +1832,25 @@ function startLinkedEvent(link,source,page){
   draft.fields=draft.fields.filter(field=>field.value||!["event-age-preset","event-fau"].includes(field.id));
   draft.fields.find(field=>field.id==="event-source").value=source;
   const saved=readDrafts("event").find(row=>row.id===draft.id);
-  form(null,saved||draft);
-  if(!saved)saveActiveDraft(true);
+  if(saved&&page){
+    const fields=[...saved.fields];
+    for(const field of draft.fields){
+      if(!field.id||field.id==="event-source"||!field.value)continue;
+      const index=fields.findIndex(item=>item.id===field.id);
+      if(index<0)fields.push(field);
+      else if(!fields[index].value)fields[index]=field;
+    }
+    const slots=saved.FS?.length||saved.FD?.length?null:draft.FS;
+    if(slots?.length){
+      for(const field of fields)if(field.name==="event-fk")field.checked=field.value==="sched";
+      if(!fields.some(field=>field.name==="event-fk"))fields.push({name:"event-fk",value:"sched",type:"radio",checked:true});
+    }
+    form(null,{...saved,fields,FS:slots?.length?slots:saved.FS});
+    saveActiveDraft(true);
+  }else{
+    form(null,saved||draft);
+    if(!saved)saveActiveDraft(true);
+  }
 }
 const EVENT_LINK_HOSTS=new Set(["www.accupass.com","accupass.com","www.opentix.life","opentix.life","huanminvillage.taipei","www.tfam.museum","kfa.kcg.gov.tw"]);
 const canReadEventLink=link=>link.startsWith("https://")&&EVENT_LINK_HOSTS.has(new URL(link).hostname);
@@ -1827,42 +1859,70 @@ async function readEventLink(link){
   const {data,error}=await sb.functions.invoke("event-link-draft",{body:{url:link}});
   return error?{code:"unavailable"}:data;
 }
+function eventDraftFromText(raw) {
+    const lines=raw.normalize("NFKC").split(/\r?\n/).map(line=>line.trim()).filter(Boolean);
+    const field=(pattern)=>lines.map(line=>line.match(pattern)?.[1]).find(Boolean)||"";
+    const datePattern=/\b(20\d{2})\s*[-/.年]\s*(\d{1,2})\s*[-/.月]\s*(\d{1,2})(?:日)?/g;
+    const datesOf=line=>[...line.matchAll(datePattern)].map(([,year,month,day])=>{
+      const date=[year,month.padStart(2,"0"),day.padStart(2,"0")].join("-");
+      const utc=new Date(date+"T00:00:00Z");
+      return Number.isFinite(+utc)&&utc.toISOString().slice(0,10)===date?date:"";
+    }).filter(Boolean);
+    const dates=[...new Set(lines.flatMap(datesOf))];
+    const explicit=lines.filter(line=>/^(?:上午場|下午場|第\s*\d+\s*場|場次)/.test(line));
+    const sessions=(explicit.length?explicit:lines.filter(line=>datesOf(line).length===1)).flatMap(line=>{
+      const localDates=[...new Set(datesOf(line))];
+      const day=localDates.length===1?localDates[0]:!localDates.length&&dates.length===1?dates[0]:"";
+      if(!day)return [];
+      return [...line.matchAll(/\b([01]?\d|2[0-3]):([0-5]\d)\s*[-–—~～至]\s*([01]?\d|2[0-3]):([0-5]\d)\b/g)].flatMap(([,h,m,eh,em])=>{
+        const start=day+"T"+h.padStart(2,"0")+":"+m,end=day+"T"+eh.padStart(2,"0")+":"+em;
+        return start<end?[{start,end}]:[];
+      });
+    });
+    const feeText=field(/^(?:費用|票價|報名費)\s*:\s*(.+)/);
+    const amount=feeText.match(/^(?:NT\$\s*)?(\d{1,5})\s*元?$/i);
+    return {
+      title:field(/^(?:活動名稱|活動標題|標題)\s*:\s*(.+)/),
+      venue:field(/^(?:活動地點|地點|場館)\s*:\s*(.+)/),
+      address:field(/^地址\s*:\s*(.+)/),
+      organizer:field(/^(?:主辦單位|主辦方)\s*:\s*(.+)/),
+      age:field(/^(?:適合年齡|參加對象|活動對象|對象)\s*:\s*(.+)/),
+      description:field(/^(?:活動說明|活動介紹|簡介)\s*:\s*(.+)/),
+      fee:/^(免費|免費參加|免費入場)[。！!]?$/u.test(feeText)?0:amount?Number(amount[1]):undefined,
+      fee_note:field(/^費用說明\s*:\s*(.+)/),
+      booking_status:/^(?:已額滿|皆已額滿|全數額滿)$/.test(field(/^報名狀態\s*:\s*(.+)/))?"full":undefined,
+      start:dates.length===1?dates[0]:undefined,sessions
+    };
+  }
 function newEventOptions(){
   const uid=AUTH.u?.id;
-  modal(`<h3>分享一個活動</h3><p class="mu">貼上公開活動頁，帶入網站有提供的資訊。支援 ACCUPASS、OPENTIX 和部分場館活動頁。</p>
+  modal(`<h3>分享一個活動</h3><p class="mu">貼上公開活動網址即可開草稿。可以自動帶入時會先填好資料，也可以貼上公告文字協助帶入。</p>
     <form id="post-link-form"><label>活動網址<input id="post-link" type="url" maxlength="1000" placeholder="https://" required></label>
-    <label>活動來源<select id="post-link-source"><option value="hosted">自己主辦</option><option value="shared">轉貼他人活動</option></select></label>
-    <p id="post-link-status" class="mu" role="status"></p><div class="r"><button id="post-link-fetch" class="p" type="submit">帶入活動資料</button>
+    <label>活動來源<select id="post-link-source"><option value="hosted">自己主辦</option><option value="shared" selected>轉貼他人活動</option></select></label>
+    <details><summary>貼上公告文字（選填）</summary><label>公告文字<textarea id="post-link-text" rows="6" maxlength="12000" placeholder="活動名稱：親子故事時間&#10;日期：2026/11/21&#10;上午場：10:30–12:00&#10;地點：活動大廳&#10;費用：免費"></textarea></label></details>
+    <p id="post-link-status" class="mu" role="status"></p><div class="r"><button class="p" type="submit">帶入資料並開啟草稿</button>
     <button id="post-link-manual" type="button">手動填寫</button></div></form>`);
-  const input=$("#post-link"),source=$("#post-link-source"),status=$("#post-link-status"),fetchButton=$("#post-link-fetch");
-  const url=()=>{
-    const value=importURL(input.value.trim());
-    if(!value)return "";
-    const link=new URL(value);
-    for(const key of [...link.searchParams.keys()])if(/^utm_|^fbclid$/i.test(key))link.searchParams.delete(key);
-    return link.href;
-  };
-  $("#post-link-manual").onclick=()=>{
-    const link=url();
-    if(link)startLinkedEvent(link,source.value);
-    else form();
-  };
-  $("#post-link-form").onsubmit=async event=>{
-    event.preventDefault();
-    const link=url();
-    if(!link||link.length>1000){status.textContent="請輸入有效的活動網址。";return}
+  const input=$("#post-link"),source=$("#post-link-source"),status=$("#post-link-status");
+  const fetchButton=$("#post-link-form [type=submit]");
+  const open=async manual=>{
+    const link=importURL(input.value.trim());
+    if(!link||link.length>1000){
+      if(manual&&!input.value.trim()){form();return}
+      status.textContent="請輸入有效的 http 或 https 活動網址。";return;
+    }
+    const text=$("#post-link-text").value.trim();
+    if(manual||text){startLinkedEvent(link,source.value,manual?undefined:eventDraftFromText(text));return}
+    if(fetchButton.disabled)return;
     fetchButton.disabled=true;
-    status.textContent="正在讀取公開活動頁…";
-    try{
-      const data=await readEventLink(link);
-      if(!status.isConnected||AUTH.u?.id!==uid)return;
-      if(data?.draft){startLinkedEvent(link,source.value,data.draft);return}
-      status.textContent=data?.code==="limit"?"今天的網址帶入次數已用完。仍可保留網址並手動填寫。":
-        "這個活動頁目前無法自動帶入。可保留網址並手動填寫。";
-    }catch{
-      if(status.isConnected)status.textContent="目前無法讀取活動頁，可保留網址並手動填寫。";
-    }finally{fetchButton.disabled=false}
+    status.textContent="正在嘗試讀取活動頁…";
+    let data;
+    try{data=await readEventLink(link)}catch{}
+    if(!status.isConnected||AUTH.u?.id!==uid)return;
+    startLinkedEvent(link,source.value,data?.draft);
+    if(!data?.draft)showToast("已保留網址。你可以補填活動資料，或返回貼上公告文字再帶入。");
   };
+  $("#post-link-manual").onclick=()=>open(true);
+  $("#post-link-form").onsubmit=event=>{event.preventDefault();open(false)};
 }
 function tv(id){
   const hour=$("#"+id+"h").value,minute=$("#"+id+"m").value.trim();
@@ -2034,10 +2094,11 @@ function resourceCard({e,first,day}){
   const place=[(e.city||"")+(e.district||""),e.venue].filter(Boolean).join(" · ");
   const total=exhibition||e.flex_time?0:E.eventSlots(e).length;
   const href=E.eventLink(e.id,day||first?.d,first&&!e.flex_time&&!e.continuous?E.attendanceKey(first):"");
-  return `<article><h3>${esc(e.title)}</h3><p><b>${exhibition?"展期":first&&e.flex_time?"預約":"場次"}</b> ${esc(timing)}</p>
-    <p>${esc(place)}</p><div class="resource-facts"><span class="t ag">${esc(E.ageTxt(e))}</span><span class="t ${e.fee===0&&(!e.fee_type||e.fee_type==="free")?"ok":""}">${E.feeTxt(e)}</span>${E.bookingBadge(e,first)}${total?`<span class="t">共 ${total} 場</span>`:""}</div>
-    ${exhibition||e.visit_note?`<p class="visit-note mu">${esc(exhibition?E.exhibitionVisit(e):e.visit_note)}</p>`:""}
-    <a class="p b" href="${esc(href)}">${exhibition?"查看展覽":"查看場次與預約"}</a></article>`;
+  const official=importURL(e.link);
+  return `<article class="next-resource-card"><div><p class="next-resource-date">${exhibition?"展期":first&&e.flex_time?"預約":"場次"} · ${esc(timing)}</p><h3><a href="${esc(href)}">${esc(e.title)}</a></h3>
+    <div class="resource-facts"><span class="t event-label event-tag-age">${esc(E.ageTxt(e))}</span><span class="t event-label event-tag-fee">${E.feeTxt(e)}</span>${E.bookingBadge(e,first)}${total?`<span class="t event-label event-tag-session">共 ${total} 場</span>`:""}</div>
+    <p>${esc(place)}</p>${exhibition||e.visit_note?`<p class="visit-note mu">${esc(exhibition?E.exhibitionVisit(e):e.visit_note)}</p>`:""}</div>
+    <div class="next-resource-actions"><a class="event-official-button" href="${esc(exhibition&&official?official:href)}" ${exhibition&&official?'target="_blank" rel="noopener noreferrer"':""}>${exhibition?(official?"查看主辦方公告 ↗":"查看展覽"):"查看場次與預約"}</a></div></article>`;
 }
 function resourceBrowse(key,records){
   const exhibition=key==="exhibitions",filters=resourceFilters[key];
@@ -2091,9 +2152,9 @@ async function resourcesPage(sub){
     const [key,title,intro,records]=selected;
     $("#app").innerHTML=`<p><a href="#/resources">← 返回分類</a></p><section class="resource-section"><h2>${title}</h2><p class="mu">${intro}</p>${categoryShortcuts(key)}<div id="resource-browse"></div></section>`;
     if(key==="websites"){
-      $("#resource-browse").innerHTML=`<div class="resource-grid">${records.map(([region,title,uses,description,url])=>`<article><h3>${esc(title)}</h3>
-        <div class="resource-facts"><span class="t ag">${esc(region)}</span>${uses.map(use=>`<span class="t">${esc(use)}</span>`).join("")}</div>
-        <p>${esc(description)}</p><a class="p b" href="${esc(url)}" target="_blank" rel="noopener noreferrer">前往${esc(title)} ↗</a></article>`).join("")}</div>`;
+      $("#resource-browse").innerHTML=`<div class="resource-grid">${records.map(([region,title,uses,description,url])=>`<article class="next-resource-card"><div><h3>${esc(title)}</h3>
+        <div class="resource-facts"><span class="t event-label event-tag-age">${esc(region)}</span>${uses.map(use=>`<span class="t event-label event-tag-audience">${esc(use)}</span>`).join("")}</div>
+        <p>${esc(description)}</p></div><div class="next-resource-actions"><a class="event-official-button" href="${esc(url)}" target="_blank" rel="noopener noreferrer">前往資源網站 ↗</a></div></article>`).join("")}</div>`;
     }else resourceBrowse(key,records);
     return;
   }
@@ -2115,7 +2176,8 @@ async function homePage(){
 <a class="pick a" href="#/events">${pickIcon("events")}<h2>找親子活動</h2><p>依地點、孩子年齡、費用與時間找近期活動。</p><span class="go">找近期活動 →</span></a>
 <a class="pick b2" href="#/games">${pickIcon("games")}<h2>找遊戲</h2><p>在家就能玩的親子遊戲點子，依孩子年齡和現有材料來找。</p><span class="go">找遊戲點子 →</span></a>
 </div>
-${categoryShortcuts()}<section class="home-feed"><div class="home-feed-head"><h3>近期親子活動</h3><a href="#/events">查看全部活動 →</a></div>${eventHtml}</section>
+<section class="home-feed"><div class="home-feed-head"><h3>近期親子活動</h3><a href="#/events">查看全部活動 →</a></div>${eventHtml}</section>
+<section class="home-more"><h3>更多親子資源</h3>${categoryShortcuts()}</section>
 <section class="home-feed"><div class="home-feed-head"><h3>最新遊戲分享</h3><a href="#/games">瀏覽全部遊戲 →</a></div>${gameHtml}</section>
 <div class="share"><h3>一起分享，讓更多家庭找到好點子</h3><p>你可以刊登自己主辦的活動、轉貼公開親子活動，或分享居家遊戲。本站不代收報名與費用。</p><div class="share-actions"><a class="primary" href="#/share-event">分享活動</a><a href="#/share-game">分享遊戲</a></div></div>`;
 }
