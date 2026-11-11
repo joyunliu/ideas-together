@@ -1795,11 +1795,13 @@ function externalDraft(item,createdAt){
     culture:{uid:item.uid,title:item.title||"網路活動",dates,price:item.price,link:item.link,sales:details.registration_url||item.sales,
       web:item.web,evidence:item.evidence,note:item.note}};
 }
-function openWebDraft(link){
-  const draft=externalDraft(linkedEventItem(link),new Date().toISOString());
-  const saved=readDrafts("event").find(row=>row.id===draft.id);
-  form(null,saved||draft);
-  if(!saved)saveActiveDraft(true);
+function openWebDraft(link,text=""){
+  const page=text.trim()?eventDraftFromText(text):undefined;
+  const item=linkedEventItem(link,page);
+  const evidence=page?.age?.trim();
+  if(evidence&&evidence.length<=160&&FAMILY_AUDIENCE.test(evidence))item.evidence=evidence;
+  const draft=externalDraft(item,new Date().toISOString());
+  showLinkedDraft(draft,page);
 }
 function linkedEventItem(link,page={}){
   const parse=value=>{
@@ -1831,8 +1833,11 @@ function startLinkedEvent(link,source,page){
   draft.linked=true;
   draft.fields=draft.fields.filter(field=>field.value||!["event-age-preset","event-fau"].includes(field.id));
   draft.fields.find(field=>field.id==="event-source").value=source;
+  showLinkedDraft(draft,page);
+}
+function showLinkedDraft(draft,hasNewData){
   const saved=readDrafts("event").find(row=>row.id===draft.id);
-  if(saved&&page){
+  if(saved&&hasNewData){
     const fields=[...saved.fields];
     for(const field of draft.fields){
       if(!field.id||field.id==="event-source"||!field.value)continue;
@@ -1845,7 +1850,11 @@ function startLinkedEvent(link,source,page){
       for(const field of fields)if(field.name==="event-fk")field.checked=field.value==="sched";
       if(!fields.some(field=>field.name==="event-fk"))fields.push({name:"event-fk",value:"sched",type:"radio",checked:true});
     }
-    form(null,{...saved,fields,FS:slots?.length?slots:saved.FS});
+    const culture=saved.culture&&draft.culture?{...saved.culture,
+      title:saved.culture.title==="網路活動"?draft.culture.title:saved.culture.title,
+      evidence:saved.culture.evidence||draft.culture.evidence
+    }:saved.culture;
+    form(null,{...saved,fields,FS:slots?.length?slots:saved.FS,...(culture?{culture}:{})});
     saveActiveDraft(true);
   }else{
     form(null,saved||draft);
@@ -2482,7 +2491,8 @@ ACT["x.webCandidates"]=()=>{
     <hr>
     <form id="web-link-form">
       <label>活動來源網址<input type="url" id="web-link" maxlength="1000" placeholder="https://" required></label>
-      <p class="mu">找到合適的活動後，貼上可公開瀏覽的主辦方公告或報名頁，開啟草稿核對。</p>
+      <p class="mu">貼上主辦方公告或報名頁。也可以貼上公告文字，先帶入辨識到的欄位，再核對草稿。</p>
+      <label>公告文字（選填）<textarea id="web-link-text" rows="6" maxlength="12000" placeholder="活動名稱：親子故事時間&#10;日期：2026/11/21&#10;上午場：10:30–12:00&#10;地點：活動大廳&#10;費用：免費"></textarea></label>
       <p id="web-link-status" class="mu" role="status"></p>
       <button type="submit" class="p">開啟活動草稿</button>
     </form>`);
@@ -2500,7 +2510,7 @@ ACT["x.webCandidates"]=()=>{
     if(!allowed())return;
     const link=importURL($("#web-link").value.trim());
     if(!link||link.length>1000){$("#web-link-status").textContent="請輸入有效的 http 或 https 活動網址。";return}
-    E.openWebDraft(link);
+    E.openWebDraft(link,$("#web-link-text").value);
   };
 };
 ACT["a.savebio"]=async()=>{const m=$("#pbm");m.textContent="儲存中…";
