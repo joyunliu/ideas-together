@@ -2545,7 +2545,7 @@ async function adminPage(){
     </div>
     <p class="mu">點選數字跳到對應區塊。數字以目前載入的資料為準，— 表示暫時無法讀取。</p>
   </section>
-  ${!AUTH.me.suspended?`<div class="card-box"><h3 style="margin-top:0">匯入親子活動</h3><p class="mu">依縣市與日期找公開活動，再貼上主辦方公告或報名網址。</p><div class="r"><button class="p" data-a="x.webCandidates">搜尋或匯入活動</button></div><div id="culture-drafts"></div></div>`:""}
+  ${!AUTH.me.suspended?`<div class="card-box"><h3 style="margin-top:0">匯入親子活動</h3><p class="mu">依縣市與日期找公開活動，再貼上主辦方公告或報名網址。</p><div class="r"><button class="p" data-a="x.webCandidates">搜尋或匯入活動</button></div><div id="culture-drafts"></div><p class="mu" style="margin-top:12px"><a href="admin/ai-import.html" target="_blank" rel="noopener">AI 活動批次匯入預覽（測試版）</a></p></div>`:""}
   <div id="event-import-queue" data-admin-target="imports" tabindex="-1"></div>
   <section class="admin-group" aria-labelledby="admin-review-title"><h3 id="admin-review-title">投稿審核與回報</h3>
     ${section("ar","待處理回報",count(openReports,reportError),reportError?'<p class="mu">無法讀取回報，請稍後再試。</p>':openReports.map(rItem).join("")||'<p class="mu">沒有待處理的回報。</p>')}
