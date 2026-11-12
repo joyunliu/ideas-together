@@ -305,6 +305,8 @@ body .t.event-label,body .event-summary .t.event-label{background:var(--label-bg
 .next-view-controls{justify-content:space-between;align-items:center;gap:4px 12px}.next-view-controls>button{margin-inline-start:auto}.next-resource-date{font-weight:700;color:var(--ac-dark)}
 .resource-grid:has(> .next-resource-card){grid-template-columns:minmax(0,1fr)}.resource-grid>.next-resource-card{background:var(--card);display:grid;gap:10px}.next-resource-card h3,.next-resource-card p{margin:0 0 5px}.home-more h3{margin:0 0 5px;font-size:16px}
 @media(min-width:761px){.resource-grid>.next-resource-card{grid-template-columns:minmax(0,1fr) auto;align-items:end;gap:20px}.next-resource-actions{justify-self:end}}
+.parenting-resources .event-official-button{min-height:44px}
+@media(max-width:760px){.parenting-resources .next-resource-actions{justify-self:stretch}.parenting-resources .event-official-button{display:flex;justify-content:center}}
 </style></head><body>
 <div class="w"><nav aria-label="主選單"><a class="brand" href="#/"><h1><svg class="brand-mark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path fill="#f8d47b" d="M8 17v-2a7 7 0 1 1 8 0v2z"/><path d="M9 20h6M10 22h4"/><path fill="#825716" stroke="none" d="M12 13s-4-2.4-4-4.5c0-2 2.7-2.8 4-.8 1.3-2 4-1.2 4 .8 0 2.1-4 4.5-4 4.5z"/></svg><span>點子共玩所<small>Ideas together</small></span></h1></a><div class="r" id="nav"></div><div class="tag">交換遊戲靈感，玩出親子生活的無限可能</div></nav>
 <div id="app"></div>
@@ -314,6 +316,7 @@ body .t.event-label,body .event-summary .t.event-label{background:var(--label-bg
   <div class="event-quick-body"></div>
 </dialog>
 <div class="m" id="md"><div class="mb" id="mb"></div></div><div id="toast" class="toast" role="status" aria-live="polite"></div>
+<script src="assets/parenting-resources.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script>
 const SB_URL="https://impuxatitpghslleasma.supabase.co",SB_KEY="sb_publishable_bufFrNEhfUMxuwNmFOosRg_rPiekiNf";
@@ -2112,11 +2115,22 @@ copyright:["著作權與下架申請",`<h3>投稿者的聲明</h3><ul><li>你投
 };
 function doc(k){const[t,h]=DOCS[k];$("#app").innerHTML=`<p><a data-go="#/">← 返回</a></p><div class="doc"><h2>${t}</h2>${h}<p class="mu">最後更新：2026 年 10 月 25 日</p></div>`}
 
-const RESOURCE_LINKS=[
-  ["新北市","新北育兒資訊網",["親子館入館","課程報名"],"依行政區與親子館查詢課程、入館時段和報名。","https://lovebaby.sw.ntpc.gov.tw/#/course-signupcourse"],
-  ["新北市","新北市立圖書館活動報名",["圖書館活動"],"找各分館的親子共讀、故事時間和閱讀活動。","https://atpass.ntpclib.gov.tw/"],
-  ["台北市","臺北育兒網",["親子館入館","課程報名"],"查各親子館資訊、預約入館與報名親子活動。","https://welfare.gov.taipei/Kids/parentChild/Index"]
-];
+const RESOURCE_LINKS=(window.PARENTING_RESOURCES||[]).filter(resource=>resource.verified);
+function parentingResourceRows(records,city){
+  return records.filter(resource=>resource.verified&&(!city||resource.city===city||resource.city==="全台"));
+}
+function parentingResourceBrowse(records){
+  const cities=[...new Set(records.map(resource=>resource.city).filter(city=>city!=="全台"))];
+  $("#resource-browse").innerHTML=`<div class="filter-panel"><label for="parenting-city">縣市篩選</label><select id="parenting-city"><option value="">全部縣市</option>${cities.map(city=>`<option value="${esc(city)}">${esc(city)}</option>`).join("")}</select></div>
+    <p id="parenting-count" class="mu" role="status"></p><div id="parenting-results"></div>`;
+  const draw=()=>{
+    const rows=parentingResourceRows(records,$("#parenting-city").value);
+    $("#parenting-count").textContent=`共 ${rows.length} 個官方資源`;
+    $("#parenting-results").innerHTML=rows.length?`<div class="resource-grid parenting-resources">${rows.map(resource=>`<article class="next-resource-card"><div><h3>${esc(resource.name)}</h3><p class="mu">${esc(resource.city)}</p><p>${esc(resource.description)}</p></div><div class="next-resource-actions"><a class="event-official-button" href="${esc(resource.url)}" target="_blank" rel="noopener noreferrer">查看活動</a></div></article>`).join("")}</div>`:'<div class="empty-state"><p>目前沒有已確認的官方資源，請稍後再查看。</p></div>';
+  };
+  $("#parenting-city").onchange=draw;
+  draw();
+}
 const resourceFilters={
   exhibitions:{q:"",city:"",day:"",age:"",fee:"",booking:"",open:false},
   fixed:{q:"",city:"",age:"",week:"",fee:"",booking:"",open:false}
@@ -2205,7 +2219,7 @@ function resourceBrowse(key,records){
 }
 async function resourcesPage(sub){
   const hash=location.hash;
-  await E.ensure();
+  if(sub!=="websites"&&sub!=="official")await E.ensure();
   if(location.hash!==hash)return;
   const approved=E.S.ev.filter(e=>e.status==="approved"&&!e.archived_at);
   const exhibitions=approved.filter(e=>E.listingType(e)==="exhibition"&&!E.exhibitionEnded(e));
@@ -2220,9 +2234,7 @@ async function resourcesPage(sub){
     const [key,title,intro,records]=selected;
     $("#app").innerHTML=`<p><a href="#/resources">← 返回分類</a></p><section class="resource-section"><h2>${title}</h2><p class="mu">${intro}</p>${categoryShortcuts(key)}<div id="resource-browse"></div></section>`;
     if(key==="websites"){
-      $("#resource-browse").innerHTML=`<div class="resource-grid">${records.map(([region,title,uses,description,url])=>`<article class="next-resource-card"><div><h3>${esc(title)}</h3>
-        <div class="resource-facts"><span class="t event-label event-tag-age">${esc(region)}</span>${uses.map(use=>`<span class="t event-label event-tag-audience">${esc(use)}</span>`).join("")}</div>
-        <p>${esc(description)}</p></div><div class="next-resource-actions"><a class="event-official-button" href="${esc(url)}" target="_blank" rel="noopener noreferrer">前往資源網站 ↗</a></div></article>`).join("")}</div>`;
+      parentingResourceBrowse(records);
     }else resourceBrowse(key,records);
     return;
   }
