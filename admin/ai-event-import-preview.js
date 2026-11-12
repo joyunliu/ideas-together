@@ -30,11 +30,13 @@ export function inspectEvent(candidate, existing=[]) {
     if (candidate[field]!=null && String(candidate[field]).length>max) errors.push(`${field} 超過 ${max} 字`);
   }
   if (!validDate(candidate.start_at)) errors.push("缺少有效開始時間");
+  if (candidate.start_at?.includes("T00:00:00") && !candidate.flex_time) warnings.push("開始時間為午夜，請確認是否只是日期占位值");
   if (candidate.end_at && (!validDate(candidate.end_at) || Date.parse(candidate.end_at)<Date.parse(candidate.start_at))) errors.push("結束時間不正確");
   if (candidate.age_min!=null && (!Number.isInteger(candidate.age_min)||candidate.age_min<0||candidate.age_min>12)) errors.push("最小年齡須為0–12歲");
   if (candidate.age_max!=null && (!Number.isInteger(candidate.age_max)||candidate.age_max<0||candidate.age_max>12)) errors.push("最大年齡須為0–12歲");
   if (candidate.age_min>candidate.age_max) errors.push("年齡範圍顛倒");
-  if (candidate.fee!=null && (!Number.isInteger(candidate.fee)||candidate.fee<0||candidate.fee>100000)) errors.push("費用須為0–100000元整數");
+  if (candidate.fee==null) errors.push("費用未確認，請查證後填入（不可預設為免費）");
+  else if (!Number.isInteger(candidate.fee)||candidate.fee<0||candidate.fee>100000) errors.push("費用須為0–100000元整數");
   if (candidate.listing_type && !allowedTypes.has(candidate.listing_type)) errors.push("活動分類無效");
   if (candidate.audience && !allowedAudience.has(candidate.audience)) errors.push("參加對象無效");
   const url=canonicalUrl(candidate.link);
