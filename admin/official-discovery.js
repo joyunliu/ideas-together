@@ -40,12 +40,15 @@ export function prepareCandidate(row) {
     ...(schedule.length?{schedule}:{}),
   };
   const issues=[];
+  const organizer=String(row.organizer||"").trim();
+  const officialOrganizer=/(政府|公所|圖書館|文化局|教育局|社會局|國立|市立|縣立|親子館|托育資源中心|博物館|美術館|文化中心|育兒資源中心)/.test(organizer);
+  if(!officialOrganizer)issues.push("資料來自官方開放資料，但主辦方未確認為公共機關；請核對原始公告");
   if(!firstSlot)issues.push("沒有可確認的開始時刻，暫以 00:00 表示；必須人工修正");
   if(!description)issues.push("缺少活動介紹");
   if(!row.city)issues.push("無法判定縣市");
   if(fee===undefined)issues.push("費用尚未確認，不能當成免費");
   issues.push("請確認活動主辦單位、報名狀態、年齡及官方原始公告");
-  return {candidate,issues,source:row};
+  return {candidate,issues,source:row,officialOrganizer};
 }
 export function prepareDiscovery(rows,region="全台",category="全部活動"){
   return (Array.isArray(rows)?rows:[])

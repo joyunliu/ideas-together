@@ -1,5 +1,5 @@
 <!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>點子共玩所｜AI 活動匯入預覽</title><style>body{font:16px system-ui,sans-serif;max-width:920px;margin:24px auto;padding:0 16px;color:#36332f;background:#faf7f1}textarea{width:100%;box-sizing:border-box;min-height:210px;padding:12px}button{padding:10px 18px;margin:8px 8px 8px 0;border:1px solid #b8a99a;border-radius:8px;background:white;cursor:pointer}.card{background:white;border:1px solid #ddd3c7;border-radius:12px;padding:16px;margin:12px 0}small{color:#756f69}.bad{color:#a32e2e}.good{color:#276b50}pre{white-space:pre-wrap;overflow-wrap:anywhere}input[type=checkbox]{margin-right:8px}</style></head><body>
-<h1>官方親子活動搜尋與匯入</h1><p>搜尋地區：全台｜活動類型：全部活動。僅顯示可辨識為政府或公共機關網域的候選活動，仍須逐筆確認官方公告、場次及報名狀態。</p><section class="card"><h2>搜尋官方活動</h2><p id="auth" role="status">正在確認管理員身分…</p><p><a href="../#/admin">返回管理後台登入</a>　<button id="retry-auth" type="button">重新驗證登入</button></p><p><button id="discover" disabled>搜尋未來三個月活動</button> <small id="feed-info"></small></p><div id="discovered"></div></section><details><summary>進階：手動編輯匯入 JSON</summary><p>貼上活動 JSON 陣列，先比對既有資料。僅允許管理員將檢查通過的活動建立為 <b>pending 待審核</b>，不會自動公開。</p>
+<h1>官方親子活動搜尋與匯入</h1><p>搜尋地區與活動類型可在下方篩選。僅顯示可辨識為政府或公共機關網域的候選活動，仍須逐筆確認官方公告、場次及報名狀態。</p><section class="card"><h2>搜尋官方活動</h2><p><label>地區 <select id="region"><option value="全台">全台</option></select></label>　<label>類型 <select id="category"><option>全部活動</option><option>親子活動</option><option>圖書館活動</option><option>展覽</option></select></label></p><p id="auth" role="status">正在確認管理員身分…</p><p><a href="../#/admin">返回管理後台登入</a>　<button id="retry-auth" type="button">重新驗證登入</button></p><p><button id="discover" disabled>搜尋未來三個月活動</button> <small id="feed-info"></small></p><div id="discovered"></div></section><details><summary>進階：手動編輯匯入 JSON</summary><p>貼上活動 JSON 陣列，先比對既有資料。僅允許管理員將檢查通過的活動建立為 <b>pending 待審核</b>，不會自動公開。</p>
 <textarea id="json" placeholder='[{"title":"活動名稱","description":"活動介紹","start_at":"2026-12-01T10:00:00+08:00","city":"台北市","link":"https://example.org/event","age_min":0,"age_max":6,"fee":0}]'></textarea>
 </details><p><label><input id="verified" type="checkbox"> 我已逐筆核對活動主辦方、官方來源、場次及報名狀態（只適用於本批資料）</label></p><div><button id="preview" disabled>檢查與預覽</button><button id="submit" disabled>建立勾選的待審核活動</button></div><p id="status" role="status"></p><div id="results"></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
@@ -8,7 +8,25 @@ import {previewImport} from "./ai-event-import-preview.js";
 import {prepareDiscovery} from "./official-discovery.js";
 const sb=supabase.createClient("https://impuxatitpghslleasma.supabase.co","sb_publishable_bufFrNEhfUMxuwNmFOosRg_rPiekiNf");
 const $=id=>document.getElementById(id), esc=x=>String(x??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-let admin=null, results=[], discovered=[];
+let admin=null, results=[], discovered=[], sourceRows=[];
+const counties=["臺北市","新北市","桃園市","臺中市","臺南市","高雄市","基隆市","新竹市","嘉義市","新竹縣","苗栗縣","彰化縣","南投縣","雲林縣","嘉義縣","屏東縣","宜蘭縣","花蓮縣","臺東縣","澎湖縣","金門縣","連江縣"];
+for(const city of counties){const option=document.createElement("option");option.value=city;option.textContent=city;$("region").append(option)}
+const normalizeCity=city=>String(city||"").replace(/^台/,"臺");
+function renderDiscovered(){
+  const region=$("region").value;
+  const filtered=sourceRows.filter(row=>region==="全台"||normalizeCity(row.city)===region);
+  discovered=prepareDiscovery(filtered,"全台",$("category").value);
+  $("feed-info").textContent=`顯示 ${Math.min(discovered.length,100)}／${discovered.length} 筆候選活動（原始資料 ${sourceRows.length} 筆）`;
+  $("discovered").innerHTML=discovered.length?discovered.slice(0,100).map(({candidate,issues,source},i)=>`<div class="card"><label><input type="checkbox" data-source-i="${i}"><b>${esc(candidate.title)}</b></label><p><small>${esc(candidate.city)}｜${esc(source.first_day)}｜${esc(candidate.venue)}｜${esc(source.organizer)}</small></p><p><a href="${esc(candidate.link)}" target="_blank" rel="noopener noreferrer">查看原始公告</a></p><p class="bad">${esc(issues.join("；"))}</p></div>`).join("")+"<button id='use-discovered'>將勾選活動帶入預覽</button>":"目前來源沒有符合條件的活動。";
+  const use=$("use-discovered");if(use)use.onclick=()=>{
+    const chosen=[...document.querySelectorAll("input[data-source-i]:checked")].map(el=>discovered[Number(el.dataset.sourceI)]?.candidate).filter(Boolean);
+    if(!chosen.length){$("status").textContent="請先勾選活動";return}
+    $("json").value=JSON.stringify(chosen,null,2);$("verified").checked=false;
+    $("status").textContent=`已帶入 ${chosen.length} 筆候選活動。請核對主辦單位、場次、費用、報名狀態與來源。`;
+    $("json").closest("details").open=true;$("json").scrollIntoView({behavior:"smooth",block:"start"});
+  };
+}
+$("region").onchange=renderDiscovered;$("category").onchange=renderDiscovered;
 async function importKey(item){
   const url=new URL(item.link);
   url.hash="";
@@ -41,20 +59,8 @@ $("discover").onclick=async()=>{
     });
     const payload=await response.json();
     if(!response.ok)throw Error(payload.error||"官方來源讀取失敗");
-    discovered=prepareDiscovery(payload.rows,"全台","全部活動");
-    $("feed-info").textContent="找到 "+discovered.length+" 筆官方網域候選活動；來源："+(payload.national_source||"未提供")+"，臺北："+(payload.taipei_source?"有":"無");
-    $("discovered").innerHTML=discovered.length?discovered.slice(0,100).map(({candidate,issues,source},i)=>
-      `<div class="card"><label><input type="checkbox" data-source-i="${i}"><b>${esc(candidate.title)}</b></label><p><small>${esc(candidate.city)}｜${esc(source.first_day)}｜${esc(candidate.venue)}｜${esc(source.organizer)}</small></p><p><a href="${esc(candidate.link)}" target="_blank" rel="noopener noreferrer">查看官方來源</a></p><p class="bad">${esc(issues.join("；"))}</p></div>`).join("")+"<button id='use-discovered'>將勾選活動帶入預覽</button>":"目前來源沒有符合條件的活動。";
-    const use=$("use-discovered");
-    if(use)use.onclick=()=>{
-      const chosen=[...document.querySelectorAll("input[data-source-i]:checked")].map(el=>discovered[Number(el.dataset.sourceI)]?.candidate).filter(Boolean);
-      if(!chosen.length){$("status").textContent="請先勾選活動";return;}
-      $("json").value=JSON.stringify(chosen,null,2);
-      $("verified").checked=false;
-      $("status").textContent="已帶入 "+chosen.length+" 筆候選活動。請先修正缺漏資料、確認官方來源及報名狀態，再進行檢查與預覽。";
-      $("json").closest("details").open=true;
-      $("json").scrollIntoView({behavior:"smooth",block:"start"});
-    };
+    sourceRows=Array.isArray(payload.rows)?payload.rows:[];
+    renderDiscovered();
   }catch(e){$("discovered").textContent="搜尋失敗："+e.message}
   finally{$("discover").disabled=false}
 };

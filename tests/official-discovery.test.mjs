@@ -26,3 +26,10 @@ test("filters region and private sources",()=>{
   assert.equal(prepareDiscovery([base],"新北市").length,0);
   assert.equal(prepareDiscovery([{...base,source_url:"https://private.example/event"}]).length,0);
 });
+
+test("flags unverified private organizer in public data",()=>{
+  const rows=prepareDiscovery([{...base,organizer:"私人活動公司"}]);
+  assert.equal(rows.length,1);
+  assert.equal(rows[0].officialOrganizer,false);
+  assert.ok(rows[0].issues.some(x=>x.includes("主辦方")));
+});
