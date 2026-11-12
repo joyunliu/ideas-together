@@ -937,11 +937,11 @@ const dayList=e=>{
 const endT=e=>{
   if(!e.end_at)return null;
   const end=taipeiDate(e.end_at);
-  return !e.continuous&&hm(end)==="23:59"?null:end;
+  return e.listing_type!=="exhibition"&&!e.continuous&&hm(end)==="23:59"?null:end;
 };
 function eventSlots(e){
   const start=hm(taipeiDate(e.start_at)),end=endT(e),days=dayList(e);
-  if(e.flex_time)return days.map(d=>({d,s:"",e:"",until:eventTime(d,"23:59:59")}));
+  if(noFixedTime(e))return days.map(d=>({d,s:"",e:"",until:eventTime(d,"23:59:59")}));
   if(e.continuous){
     return days.map((d,i)=>({d,s:i===0?start:"00:00",e:i===days.length-1&&end?hm(end):"",
       until:i===days.length-1&&e.end_at?new Date(e.end_at):eventTime(d,"23:59:59")}));
@@ -973,7 +973,7 @@ const dateSpan=e=>{
 };
 const continuousText=e=>md(taipeiDate(e.start_at))+" "+hm(taipeiDate(e.start_at))+" – "+md(taipeiDate(e.end_at))+" "+hm(taipeiDate(e.end_at));
 const tRange=e=>{
-  if(e.flex_time)return dateSpan(e)+" · 可預約";
+  if(noFixedTime(e))return dateSpan(e)+" · 無特定時間"+(e.flex_time?" · 可自行預約":"");
   if(e.continuous)return continuousText(e);
   const slots=eventSlots(e);
   return slots.slice(0,3).map(slotText).join("、")+(slots.length>3?"（共 "+slots.length+" 場）":"");
@@ -983,12 +983,33 @@ const MAX_SESSIONS=60;
 const listingType=e=>e.listing_type||(e.flex_time||e.recurrence_note&&!e.series_booking?"resource":"event");
 const exhibitionPeriod=e=>[ymd(taipeiDate(e.start_at)),ymd(taipeiDate(e.end_at||e.start_at))];
 const exhibitionEnded=e=>e.end_at?Date.parse(e.end_at)<Date.now():exhibitionPeriod(e)[1]<ymd(taipeiToday());
-const exhibitionVisit=e=>[e.visit_note,"開放時間請見公告"].filter(Boolean).join("\n");
+// Keep timing and closure options in the existing human-readable visit_note field.
+// Exact generated lines are reserved; all other notes (including legacy notes) are retained.
+function visitSettings(e){
+  let noTime=null,closed=[];
+  const text=(e?.visit_note||"").split("\n").filter(line=>{
+    if(line==="時間安排：無特定時間"){noTime=true;return false}
+    if(line==="時間安排：固定時間"){noTime=false;return false}
+    if(/^休館日：每週[日一二三四五六](?:、每週[日一二三四五六])*$/.test(line)){
+      closed=line.slice(4).split("、").map(day=>WK.indexOf(day.at(-1)));return false;
+    }
+    return true;
+  }).join("\n").trim();
+  return {noTime:noTime??!!e?.flex_time,closed,text};
+}
+const noFixedTime=e=>visitSettings(e).noTime;
+function visitDetails(e){
+  const {closed,text}=visitSettings(e);
+  return [text,closed.length?"休館日："+closed.map(day=>"每週"+WK[day]).join("、"):"",e.flex_time?"可自行預約":""].filter(Boolean).join("\n");
+}
+const exhibitionVisit=e=>[noFixedTime(e)?"無特定時間／開放時間請見公告":
+  "每日開放時間："+timeText(hm(taipeiDate(e.start_at)),endT(e)?hm(endT(e)):""),visitDetails(e)].filter(Boolean).join("\n");
 const includesAge=(e,age)=>hasMonths(e)?e.age_min_month<(age+1)*12&&e.age_max_month>=age*12:e.age_min<=age&&e.age_max>=age;
 const exhibitionDates=e=>`${fdate(taipeiDate(e.start_at))}${e.end_at&&ymd(taipeiDate(e.start_at))!==ymd(taipeiDate(e.end_at))?" ～ "+fdate(taipeiDate(e.end_at)):""}`;
-const SESSION_TYPES={single:"單場活動",multi:"多場可選",recurring:"固定開課",series:"整期報名",flex:"自行預約"};
+const SESSION_TYPES={single:"單場活動",multi:"多場可選",recurring:"固定開課",series:"整期報名",flex:"自行預約",unspecified:"無特定時間"};
 function sessionType(e,slots=eventSlots(e)){
   if(e.flex_time)return "flex";
+  if(noFixedTime(e))return "unspecified";
   if(e.continuous)return "single";
   if(e.series_booking&&slots.length>1)return "series";
   if(e.recurrence_note&&listingType(e)==="resource")return "recurring";
@@ -1012,7 +1033,7 @@ function groupSlots(slots){
 function dayLines(e,slots,focus,selectedDay){
   const chosen=selectedDay&&focus?.d===selectedDay?`<p>查看日期：${esc(fdate(dateOf(selectedDay)))}</p>`:"";
   if(e.continuous)return chosen+"<p>開始 "+fdate(taipeiDate(e.start_at))+" "+hm(taipeiDate(e.start_at))+"<br>結束 "+fdate(taipeiDate(e.end_at))+" "+hm(taipeiDate(e.end_at))+"</p>";
-  if(e.flex_time)return chosen+"<p>"+esc(dateSpan(e))+" · 時間由家長與主辦方約定</p>";
+  if(noFixedTime(e))return chosen+"<p>"+esc(dateSpan(e))+" · 無特定時間"+(e.flex_time?"，可自行預約":"")+"</p>";
   if(!focus)return '<p class="mu">近期場次請查主辦方公告。</p>';
   const rest=slots.filter(slot=>slot!==focus);
   const showAll=slots.length<=4;
@@ -1321,7 +1342,7 @@ function filteredSlots(e,now,today){
       if(key==="7d")return offset>=0&&offset<=7;
       return date.getMonth()===today.getMonth()&&date.getFullYear()===today.getFullYear();
     }))return false;
-    if(!S.tod.size||e.flex_time)return true;
+    if(!S.tod.size||noFixedTime(e))return true;
     const start=hh(slot.s),end=slot.e?hh(slot.e):e.continuous?24:start+.01;
     return [...S.tod].some(key=>start<TOD[key][1]&&end>TOD[key][0]);
   });
@@ -1524,7 +1545,7 @@ function detailHTML(e,quick=false,selectedDay,selectedSlot){
   <p>${feeTxt(e)}${feeType(e)==="range"&&e.fee_max!=null?"（最高 NT$ "+Number(e.fee_max).toLocaleString("zh-TW")+"）":""}</p></section>
   ${marketAdmission(e)||e.fee_note?`<section class="detail-block"><h3>費用說明</h3><p class="visit-note">${marketAdmission(e)?"小市集開放給入館民眾，館方公告未另列市集票價。":esc(e.fee_note)}</p></section>`:""}
   <section class="detail-block"><h3>預約與官方公告</h3>
-  ${category!=="exhibition"&&e.visit_note?`<p class="visit-note">${esc(e.visit_note)}</p>`:""}
+  ${category!=="exhibition"&&visitDetails(e)?`<p class="visit-note">${esc(visitDetails(e))}</p>`:""}
   ${category==="exhibition"?`<p>${bookingBadge(e)}</p>`:""}
   ${e.booking_checked_at?`<p class="mu">報名狀態更新於 ${esc(fdate(taipeiDate(e.booking_checked_at))+" "+hm(taipeiDate(e.booking_checked_at)))}</p>`:""}
   ${link?`<p><a class="event-official-button" ${link.infoOnly?"":"data-registration"} href="${esc(e.link)}" target="_blank" rel="noopener noreferrer nofollow ugc">${link.label} ↗</a></p>${link.hint?`<p class="mu">${esc(link.hint)}</p>`:""}`:'<p class="mu">詳情請洽主辦方。</p>'}</section>
@@ -1572,17 +1593,23 @@ function drawSch(){const b=$("#schrows");if(!b)return;b.innerHTML=FS.map((x,i)=>
 function drawChips(){const b=$("#dchips");if(b)b.innerHTML=FD.map(d=>{const x=new Date(d+"T00:00");return `<span class="t" style="font-size:13px;padding:5px 6px 5px 11px">${md(x)}（週${WK[x.getDay()]}）<button data-a="e.rmdate" data-d="${d}" aria-label="移除這個日期" style="border:0;background:none;padding:0 6px;cursor:pointer;color:var(--er)">×</button></span>`}).join("")||'<span class="mu">還沒有加入日期</span>'}
 function kindUI(){const k=(document.querySelector("[name=event-fk]:checked")||{}).value||"";
   $("#k_single").style.display=k==="single"?"":"none";$("#k_dates").style.display=k==="dates"?"":"none";$("#k_range").style.display=k==="range"?"":"none";$("#k_sched").style.display=k==="sched"?"":"none";
-  $("#tbox").style.display=k&&k!=="sched"?"":"none";$("#contbox").style.display=k==="range"?"block":"none";
+  const exhibition=$("#event-listing-type").value==="exhibition";
+  for(const input of document.querySelectorAll('[name="event-fk"]'))input.disabled=exhibition&&!["single","range"].includes(input.value);
+  $("#event-closed-days").hidden=!exhibition;
+  $("#tbox").style.display=k&&k!=="sched"?"":"none";$("#contbox").style.display=k==="range"&&!exhibition?"block":"none";
+  if(exhibition)$("#event-fcont").checked=false;
   if(k!=="range")$("#event-fcont").checked=false;
   const cont=k==="range"&&$("#event-fcont").checked;$("#fxbox").style.display=cont?"none":"block";if(cont)$("#event-fx").checked=false;
-  $("#tprow").style.display=$("#event-fx").checked?"none":"";
+  $("#no-time-box").style.display=cont?"none":"block";
+  if(cont)$("#event-no-time").checked=false;
+  $("#tprow").style.display=$("#event-no-time").checked?"none":"";
   const isFlexible=k!=="sched"&&$("#event-fx").checked;
-  $("#event-recurring-field").hidden=!k||cont||isFlexible;
-  $("#event-series-field").hidden=!["dates","range","sched"].includes(k)||cont||isFlexible;
+  $("#event-recurring-field").hidden=exhibition||!k||cont||isFlexible;
+  $("#event-series-field").hidden=exhibition||!["dates","range","sched"].includes(k)||cont||isFlexible;
   updateBookingFields();
-  $("#lbs").textContent=k==="single"?"開始時間（24 小時制）":cont?"第一天的開始時間（24 小時制）":"每天開始時間（24 小時制）";
-  $("#lbe").textContent=k==="single"?"結束時間（選填）":cont?"最後一天的結束時間":"每天結束時間（選填）";
-  $("#khint").textContent={"":"請先選擇活動類型，再填寫日期與時間。",single:"單日活動：只在一天舉辦。",dates:"多日活動：選出舉辦的每一天（日期不一定相連），每天使用相同的時段，例如 11/7 和 11/21 都是 09:00–12:00。",sched:"為每一場活動設定日期和時間。同一天若有早上與下午兩場，可以加入同一個日期兩次。",range:"連續多日：從開始日到結束日每天都舉辦，每天使用相同的時段。如果是住宿營隊這類不分每天的活動，請勾選「跨日連續進行」。"}[k]}
+  $("#lbs").textContent=exhibition?"每日開放時間（開始）":k==="single"?"開始時間（24 小時制）":cont?"第一天的開始時間（24 小時制）":"每天開始時間（24 小時制）";
+  $("#lbe").textContent=exhibition?"每日開放時間（結束）":k==="single"?"結束時間（選填）":cont?"最後一天的結束時間":"每天結束時間（選填）";
+  $("#khint").textContent=exhibition?"展覽可選單日或長期日期範圍。每日開放時間可填，未定時間可勾選「無特定時間」；休館日另行設定。":{"":"請先選擇活動類型，再填寫日期與時間。",single:"單日活動：只在一天舉辦。",dates:"多日活動：選出舉辦的每一天（日期不一定相連），每天使用相同的時段，例如 11/7 和 11/21 都是 09:00–12:00。",sched:"為每一場活動設定日期和時間。同一天若有早上與下午兩場，可以加入同一個日期兩次。",range:"連續多日：從開始日到結束日每天都舉辦，每天使用相同的時段。如果是住宿營隊這類不分每天的活動，請勾選「跨日連續進行」。"}[k]}
 function form(e,draft,template,append=false,adminEdit=false){
   if(adminEdit&&(!AUTH.me?.is_admin||AUTH.me.suspended||e?.status!=="approved"||e.archived_at))return;
   const editing=e,imported=draft?.culture;
@@ -1600,10 +1627,10 @@ function form(e,draft,template,append=false,adminEdit=false){
   <section class="post-step"><h4 tabindex="-1">活動與場次</h4>
   <div class="r"><label>活動來源<select id="event-source">${imported?"":'<option value="hosted">自己主辦</option>'}<option value="shared" ${e?.shared_organizer||imported?"selected":""}>轉貼他人活動</option></select></label>
   <label>活動形式<select id="event-format"><option value="in-person">實體活動</option><option value="online" ${e?.city===ONLINE?"selected":""}>線上活動</option></select></label></div>
-  <div id="event-shared-fields" hidden><label>主辦方名稱（必填）<input id="event-organizer" maxlength="100" value="${esc(e?.shared_organizer)}"></label></div>
   <label>活動主題（${EVENT_TITLE_LIMIT} 字內）<input id="event-ft" maxlength="${EVENT_TITLE_LIMIT}" value="${esc(e?.title)}"></label>
+  <div id="event-shared-fields" hidden><label>主辦方名稱（必填）<input id="event-organizer" maxlength="100" value="${esc(e?.shared_organizer)}"></label></div>
   <label>刊登分類<select id="event-listing-type"><option value="">依場次安排判斷</option>${Object.entries(LISTING_TYPES).map(([key,label])=>`<option value="${key}" ${e?.listing_type===key?"selected":""}>${label}</option>`).join("")}</select></label>
-  <p class="mu">短期場次放活動日曆。展覽請選日期範圍，固定舉辦或自行預約請放相關資源。</p>
+  <p class="mu">短期場次放活動日曆。展覽可選單日或長期日期範圍，已開始但尚未結束也能分享；每日開放時間可填，或勾選無特定時間。</p>
   <div class="filter-label" style="margin-top:4px">活動日期安排</div>
   <div class="r">${[["single","單日活動"],["dates","多日活動（指定幾天）"],["range","連續多日（連續幾天）"],["sched","多場次（分別設定時間）"]].map(([v,t])=>`<label class="kopt"><input type="radio" name="event-fk" value="${v}" ${kind===v?"checked":""} onchange="kindUI()">${t}</label>`).join("")}</div>
   <p class="mu" id="khint" style="margin:0 0 10px"></p>
@@ -1615,10 +1642,12 @@ function form(e,draft,template,append=false,adminEdit=false){
   <label id="event-series-field"><input type="checkbox" id="event-series" style="width:auto;margin:0 6px 0 0" ${e?.series_booking&&!template?"checked":""}>所有場次須整期報名</label>
   <p class="mu">相同課程可在同一則活動加入多個日期或時段。請填已公布的日期，固定開課說明只用於顯示。</p>
   <div id="tbox">
-  <label class="mu" id="fxbox" style="display:block;margin:0 0 10px"><input type="checkbox" id="event-fx" style="width:auto;margin:0 6px 0 0" ${e&&e.flex_time?"checked":""} onchange="kindUI()">無特定時間／可自行預約</label>
-  <div class="r" id="tprow"><label><span id="lbs"></span>${tp("event-fs1",e&&e.flex_time?null:st)}</label><label><span id="lbe"></span>${tp("event-fe1",e&&!e.flex_time&&endT(e)?en:null)}</label></div>
+  <label class="mu" id="fxbox" style="display:block;margin:0 0 10px"><input type="checkbox" id="event-fx" style="width:auto;margin:0 6px 0 0" ${e&&e.flex_time?"checked":""} onchange="kindUI()">可自行預約</label>
+  <label class="mu" id="no-time-box" style="display:block;margin:0 0 10px"><input type="checkbox" id="event-no-time" style="width:auto;margin:0 6px 0 0" ${e&&noFixedTime(e)?"checked":""} onchange="kindUI()">無特定時間</label>
+  <div class="r" id="tprow"><label><span id="lbs"></span>${tp("event-fs1",e&&noFixedTime(e)?null:st)}</label><label><span id="lbe"></span>${tp("event-fe1",e&&!noFixedTime(e)&&endT(e)?en:null)}</label></div>
   <label class="mu" id="contbox" style="display:block;margin:0 0 10px"><input type="checkbox" id="event-fcont" style="width:auto;margin:0 6px 0 0" ${e&&e.continuous?"checked":""} onchange="kindUI()">跨日連續進行（例如住宿營隊，不是每天各有一段時間）</label>
   </div>
+  <fieldset id="event-closed-days" hidden><legend>休館日（選填）</legend><div class="r">${[1,2,3,4,5,6,0].map(day=>`<label><input type="checkbox" name="event-closed-day" value="${day}" style="width:auto;margin:0 6px 0 0" ${visitSettings(e).closed.includes(day)?"checked":""}>每週${WK[day]}</label>`).join("")}</div><p class="mu">臨時休館或其他開放限制可填在補充說明。</p></fieldset>
   <datalist id="mins"><option value="00"><option value="15"><option value="30"><option value="45"></datalist>
   </section><section class="post-step" hidden><h4 tabindex="-1">地點與參與資訊</h4>
   <div id="event-place"><div class="r"><label>縣市<select id="event-fc" onchange="fillDist()"><option value="">請選擇縣市</option>${CITIES.map(c=>`<option ${e?.city===c?"selected":""}>${c}</option>`).join("")}</select></label><label>區／鄉鎮（${imported?"必填":"選填"}）<select id="event-fz"></select></label></div>
@@ -1639,7 +1668,7 @@ function form(e,draft,template,append=false,adminEdit=false){
   <p id="event-booking-complete" class="mu" hidden>每場都已填寫報名狀態，這裡不用再選。</p>
   ${editing?.booking_checked_at?'<label><input type="checkbox" id="event-recheck" style="width:auto"> 我已重新確認目前的報名狀態</label>':""}
   <label>活動說明<textarea id="event-fh" rows="6" maxlength="800">${esc(e?.description)}</textarea></label>
-  <label>開放時間、休館日或預約方式（資源與展覽適用）<textarea id="event-visit-note" rows="2" maxlength="240">${esc(e?.visit_note)}</textarea></label>
+  <label>參觀與預約補充說明（選填）<textarea id="event-visit-note" rows="2" maxlength="240">${esc(visitSettings(e).text)}</textarea></label>
   <label>相關展覽（短期導覽或工作坊適用）<select id="event-related-exhibition"><option value="">不指定</option>${S.ev.filter(row=>row.id!==e?.id&&row.status==="approved"&&listingType(row)==="exhibition").map(row=>`<option value="${row.id}" ${row.id===e?.related_exhibition_id?"selected":""}>${esc(row.title)}</option>`).join("")}</select></label>
   <label><span id="event-link-label"></span><input id="event-fl" type="url" maxlength="1000" placeholder="https://" value="${esc(e?.link)}"></label>
   </section><section class="post-step" hidden><h4 tabindex="-1">照片與送審</h4><p class="post-preview"></p>
@@ -1676,6 +1705,7 @@ function form(e,draft,template,append=false,adminEdit=false){
   feeFields();
   ageMode.onchange=showAges;
   $("#event-format").onchange=$("#event-source").onchange=showOptions;
+  $("#event-listing-type").onchange=kindUI;
   $("#schrows").addEventListener("change",updateBookingFields);
   fillDist(e?.district);kindUI();drawChips();drawSch();showAges();showOptions();
   bindDraft("event",editing,draft,{
@@ -1694,6 +1724,7 @@ function form(e,draft,template,append=false,adminEdit=false){
         $("#event-source").value="shared";
         $("#event-confirm-availability").checked=false;
       }
+      if(!old.fields.some(field=>field.id==="event-no-time"))$("#event-no-time").checked=$("#event-fx").checked;
       kindUI();showAges();showOptions();
     },
     wizard:{
@@ -1744,7 +1775,7 @@ function form(e,draft,template,append=false,adminEdit=false){
           ageTxt({age_min,age_max,age_detail:val("age-detail"),age_min_month:from?+from:null,age_max_month:to?+to:null}):"";
         const feeMissing=(type==="fixed"&&!val("ff"))||(type==="range"&&(!val("ff")||!val("fee-max")));
         const price=feeMissing?"費用待填":feeTxt({fee:+val("ff"),fee_type:type,fee_max:val("fee-max")?+val("fee-max"):null});
-        box.textContent=[val("ft"),timing.row?tRange(timing.row):"",online()?ONLINE:val("fc")+val("fz"),
+        box.textContent=[val("ft"),timing.row?(val("listing-type")==="exhibition"?exhibitionDates(timing.row)+" · "+exhibitionVisit(timing.row):tRange(timing.row)):"",online()?ONLINE:val("fc")+val("fz"),
           shared()?(val("organizer")?"轉貼他人活動｜主辦方："+val("organizer"):"轉貼他人活動"):"自己主辦",
           age,price].filter(Boolean).join(" · ");
       },
@@ -1757,7 +1788,7 @@ function form(e,draft,template,append=false,adminEdit=false){
         const statesChanged=booking!==(editing?.booking_status||null)||JSON.stringify(slotStates(timing.row.schedule))!==JSON.stringify(slotStates(editing?.schedule));
         const hasStatus=booking||slotStates(timing.row.schedule).length;
         const row={...timing.row,age_detail:val("age-detail")||null,age_min_month:from?Number(from):null,age_max_month:to?Number(to):null,
-          listing_type:val("listing-type")||null,visit_note:val("visit-note")||null,related_exhibition_id:val("related-exhibition")||null,
+          listing_type:val("listing-type")||null,related_exhibition_id:val("related-exhibition")||null,
           series_booking:!$("#event-series-field").hidden&&$("#event-series").checked&&eventSlots(timing.row).length>1,
           recurrence_note:!timing.row.flex_time&&!timing.row.continuous?val("recurrence")||null:null,
           booking_status:booking,booking_checked_at:hasStatus?(statesChanged||$("#event-recheck")?.checked||!editing?.booking_checked_at?new Date().toISOString():editing.booking_checked_at):null,
@@ -2006,11 +2037,16 @@ function readTiming(editing){
   const val=id=>$("#event-"+id).value;
   const fail=error=>({error});
   if(!k)return fail("請先選擇活動日期安排。");
-  const continuous=k==="range"&&$("#event-fcont").checked;
+  const exhibition=$("#event-listing-type").value==="exhibition";
+  if(exhibition&&!["single","range"].includes(k))return fail("展覽請選單日活動或連續多日日期範圍。");
+  const continuous=!exhibition&&k==="range"&&$("#event-fcont").checked;
   const flex_time=k!=="sched"&&!continuous&&$("#event-fx").checked;
-  let start=k==="sched"?"":flex_time?"00:00":tv("event-fs1");
-  let end=k==="sched"||flex_time?"":tv("event-fe1");
+  let noTime=k!=="sched"&&!continuous&&$("#event-no-time").checked;
+  let start=k==="sched"?"":noTime?"00:00":tv("event-fs1");
+  let end=k==="sched"||noTime?"":tv("event-fe1");
   if(start===null||end===null)return fail("分鐘請輸入 00 到 59。");
+  if(exhibition&&!start&&!end){noTime=true;start="00:00"}
+  if(exhibition&&!noTime&&(!start||!end))return fail("請填寫完整的每日開放時間，或勾選「無特定時間」。");
   let first="",last="",dates=null,schedule=null;
   if(k==="single")first=val("fd1");
   if(k==="range"){
@@ -2038,18 +2074,19 @@ function readTiming(editing){
   if(continuous&&!end)return fail("請填寫最後一天的結束時間。");
   if(!continuous&&k!=="sched"&&end&&end<=start)return fail("結束時間需晚於開始時間。");
   const st=eventTime(first,start);
-  let en=last?eventTime(last,end||"23:59"):end?eventTime(first,end):null;
+  let en=last?eventTime(last,end||"23:59:59"):end?eventTime(first,end):noTime||exhibition?eventTime(first,"23:59:59"):null;
   if(schedule)en=new Date(Math.max(...schedule.map(slot=>+eventTime(slot.d,slot.e||"23:59:59"))));
   if(!Number.isFinite(+st)||(en&&!Number.isFinite(+en)))return fail("日期或時間格式不正確。");
-  const exhibition=$("#event-listing-type").value==="exhibition";
-  if(exhibition&&(flex_time||!["single","range"].includes(k)))return fail("展覽請選單日或連續日期範圍，並填寫開放時間。");
-  if($("#event-listing-type").value==="event"&&flex_time)return fail("自行預約請選「固定活動與自行預約」。");
-  if(!editing&&(exhibition?(en||eventTime(first,"23:59:59"))<new Date():flex_time?first<ymd(taipeiToday()):st<new Date()))return fail("活動開始時間需在現在之後。");
+  if($("#event-listing-type").value==="event"&&flex_time)return fail("自行預約請選「固定活動與自行預約」或「展覽」。");
+  if(!editing&&(exhibition?(en||eventTime(first,"23:59:59"))<new Date():noTime?first<ymd(taipeiToday()):st<new Date()))return fail(exhibition?"展覽已結束，請確認結束日期與開放時間。":"活動開始時間需在現在之後。");
   if($("#event-listing-type").value==="event"&&first>windowEnd(new Date()))return fail("一般活動只收錄未來三個月內開始的活動。");
-  const maxRange=exhibition?366:31;
-  if(k==="range"&&(en-st)/864e5>maxRange)return fail("日期範圍最長 "+maxRange+" 天。");
+  if(!exhibition&&k==="range"&&(en-st)/864e5>31)return fail("日期範圍最長 31 天。");
   if(dates&&(en-st)/864e5>90)return fail("多日活動的日期範圍最長 90 天。");
-  return {row:{start_at:st.toISOString(),end_at:en?.toISOString()||null,flex_time,continuous,dates,schedule}};
+  const closed=exhibition?Array.from(document.querySelectorAll('[name="event-closed-day"]:checked'),input=>Number(input.value)):[];
+  const note=visitSettings({visit_note:val("visit-note")}).text;
+  const visit_note=[noTime?"時間安排：無特定時間":flex_time?"時間安排：固定時間":"",closed.length?"休館日："+closed.map(day=>"每週"+WK[day]).join("、"):"",note].filter(Boolean).join("\n");
+  if(visit_note.length>240)return fail("參觀與預約補充說明加上時間及休館日設定，合計需在 240 字內。");
+  return {row:{start_at:st.toISOString(),end_at:en?.toISOString()||null,flex_time,continuous,dates,schedule,visit_note:visit_note||null}};
 }
 async function org(id){
   const{data:p}=await sb.from("profiles").select("id,nickname,account_type,bio,website,suspended").eq("id",id).maybeSingle();
@@ -2065,7 +2102,7 @@ async function ensure(){if(Date.now()-T>60000)await load()}
 async function show(sub,id,params){const hash=location.hash;await ensure();if(hash!==location.hash)return;if(sub==="e")await detail(id,params);else if(sub==="org")await org(id);else home()}
 const SKIP=new Set(["menu","shut","auth","reg","login","signup","forgot","setpw","out","sus","unsus","delrep"]);
 Object.keys(act).forEach(k=>{if(!SKIP.has(k))ACT["e."+k]=act[k]});
-return{S,ensure,reset,show,openQuick,closeQuick,openDraft:form,openAdminEdit:(e,draft)=>form(e,draft,null,false,true),openNew:act.new,openWebDraft,attendanceList,listingType,exhibitionDates,eventRegistration,tRange,ageTxt,feeTxt,feeMatches,AUD,isOrg,orgTag,nick,REASONS,load,ecard,nextEventDate,upcomingSlots,eventSlots,eventLink,attendanceKey,slotText,bookingBadge,bookingState,normalizeCity,CITIES,ONLINE,taipeiToday,ymd,exhibitionPeriod,exhibitionEnded,exhibitionVisit,includesAge};
+return{S,ensure,reset,show,openQuick,closeQuick,openDraft:form,openAdminEdit:(e,draft)=>form(e,draft,null,false,true),openNew:act.new,openWebDraft,attendanceList,listingType,exhibitionDates,eventRegistration,tRange,ageTxt,feeTxt,feeMatches,AUD,isOrg,orgTag,nick,REASONS,load,ecard,nextEventDate,upcomingSlots,eventSlots,eventLink,attendanceKey,slotText,bookingBadge,bookingState,normalizeCity,CITIES,ONLINE,taipeiToday,ymd,exhibitionPeriod,exhibitionEnded,exhibitionVisit,visitDetails,includesAge};
 })();
 ACT["activity-report"]=button=>{
   if(!AUTH.u){authBox(false);showToast("請登入後再回報活動資訊。");return}
@@ -2179,7 +2216,7 @@ function resourceCard({e,first,day}){
   const official=importURL(e.link);
   return `<article class="next-resource-card"><div><p class="next-resource-date">${exhibition?"展期":first&&e.flex_time?"預約":"場次"} · ${esc(timing)}</p><h3><a href="${esc(href)}">${esc(e.title)}</a></h3>
     <div class="resource-facts"><span class="t event-label event-tag-age">${esc(E.ageTxt(e))}</span><span class="t event-label event-tag-fee">${E.feeTxt(e)}</span>${E.bookingBadge(e,first)}${total?`<span class="t event-label event-tag-session">共 ${total} 場</span>`:""}</div>
-    <p>${esc(place)}</p>${exhibition||e.visit_note?`<p class="visit-note mu">${esc(exhibition?E.exhibitionVisit(e):e.visit_note)}</p>`:""}</div>
+    <p>${esc(place)}</p>${exhibition||E.visitDetails(e)?`<p class="visit-note mu">${esc(exhibition?E.exhibitionVisit(e):E.visitDetails(e))}</p>`:""}</div>
     <div class="next-resource-actions"><a class="event-official-button" href="${esc(exhibition&&official?official:href)}" ${exhibition&&official?'target="_blank" rel="noopener noreferrer"':""}>${exhibition?(official?"查看主辦方公告 ↗":"查看展覽"):"查看場次與預約"}</a></div></article>`;
 }
 function resourceBrowse(key,records){

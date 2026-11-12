@@ -161,6 +161,22 @@ await db.exec("reset role");
 assert.equal((await db.query("select launch_private.archive_expired() as count")).rows[0].count,0);
 assert.equal((await db.query("select archive_exempt from events where id=$1",[event])).rows[0].archive_exempt,true);
 console.log("PASS: archive exclusions, preserved favorites, repeat execution, visibility and restore");
+// Timing/closure data uses existing columns and must survive real RLS review.
+for(const [title,type,flex,note,start,end] of [
+ ['Ongoing exhibition','exhibition',false,'時間安排：無特定時間\n休館日：每週一',-40,100],
+ ['Single exhibition','exhibition',true,'時間安排：固定時間\n休館日：每週二',1,1.25],
+ ['Untimed activity','event',false,'時間安排：無特定時間',1,2]
+]){
+ await as('authenticated',member);
+ const id=await submit(title);
+ await db.query(`update events set listing_type=$2,flex_time=$3,visit_note=$4,
+  start_at=now()+$5*interval '1 day',end_at=now()+$6*interval '1 day' where id=$1`,[id,type,flex,note,start,end]);
+ await as('authenticated',admin);assert.equal((await review(id,'approved')).rows.length,1);
+ await as('anon');
+ const stored=(await db.query('select listing_type,flex_time,visit_note,end_at>start_at as valid_range from events where id=$1',[id])).rows[0];
+ assert.deepEqual(stored,{listing_type:type,flex_time:flex,visit_note:note,valid_range:true});
+}
+console.log('PASS: ongoing/single exhibitions and untimed activities persist timing/closures through member submission, administrator approval and anonymous reads');
 await db.close();
 console.log("PASS: PostgreSQL migrations, fee checks, cleanup dependencies, reaction privacy, report permissions, membership and imported fee");
 })().catch(e=>{console.error(e);process.exitCode=1});
