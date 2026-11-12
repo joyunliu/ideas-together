@@ -1,0 +1,70 @@
+<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>點子共玩所｜AI 活動匯入預覽</title><style>body{font:16px system-ui,sans-serif;max-width:920px;margin:24px auto;padding:0 16px;color:#36332f;background:#faf7f1}textarea{width:100%;box-sizing:border-box;min-height:210px;padding:12px}button{padding:10px 18px;margin:8px 8px 8px 0;border:1px solid #b8a99a;border-radius:8px;background:white;cursor:pointer}.card{background:white;border:1px solid #ddd3c7;border-radius:12px;padding:16px;margin:12px 0}small{color:#756f69}.bad{color:#a32e2e}.good{color:#276b50}pre{white-space:pre-wrap;overflow-wrap:anywhere}input[type=checkbox]{margin-right:8px}</style></head><body>
+<h1>AI 活動匯入｜管理員預覽</h1><p>貼上活動 JSON 陣列，先比對既有資料。僅允許管理員將檢查通過的活動建立為 <b>pending 待審核</b>，不會自動公開。</p>
+<p id="auth">正在確認管理員身分…</p><textarea id="json" placeholder='[{"title":"活動名稱","description":"活動介紹","start_at":"2026-12-01T10:00:00+08:00","city":"台北市","link":"https://example.org/event","age_min":0,"age_max":6,"fee":0}]'></textarea>
+<p><label><input id="verified" type="checkbox"> 我已逐筆核對活動主辦方、官方來源、場次及報名狀態（只適用於本批資料）</label></p><div><button id="preview" disabled>檢查與預覽</button><button id="submit" disabled>建立勾選的待審核活動</button></div><p id="status" role="status"></p><div id="results"></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script type="module">
+import {previewImport} from "./ai-event-import-preview.js";
+const sb=supabase.createClient("https://impuxatitpghslleasma.supabase.co","sb_publishable_bufFrNEhfUMxuwNmFOosRg_rPiekiNf");
+const $=id=>document.getElementById(id), esc=x=>String(x??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+let admin=null, results=[];
+async function importKey(item){
+  const url=new URL(item.link);
+  url.hash="";
+  for(const key of [...url.searchParams.keys()])if(/^(utm_|fbclid$|gclid$)/i.test(key))url.searchParams.delete(key);
+  const identity=[url.href.replace(/\/$/,""),item.title,item.start_at,item.city,item.venue||""]
+    .map(x=>String(x??"").normalize("NFKC").trim().toLowerCase()).join("\u001f");
+  const bytes=new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(identity)));
+  return "v1:"+Array.from(bytes,b=>b.toString(16).padStart(2,"0")).join("");
+}
+async function verify(){
+  const {data:{user},error}=await sb.auth.getUser();
+  if(error||!user){$("auth").textContent="請先在同一個網站登入管理員帳號。";return}
+  const {data:profile,error:profileError}=await sb.from("profiles").select("is_admin,suspended").eq("id",user.id).single();
+  if(profileError||!profile?.is_admin||profile.suspended){$("auth").textContent="目前帳號沒有管理員權限。";return}
+  admin=user.id;$("auth").textContent="管理員驗證通過。";$("preview").disabled=false;
+}
+$("preview").onclick=async()=>{
+  $("submit").disabled=true;$("results").replaceChildren();results=[];
+  if(!admin)return;
+  try{
+    const items=JSON.parse($("json").value);
+    if(!Array.isArray(items)||items.length>100)throw Error("請輸入最多100筆的 JSON 陣列");
+    // Paginate to avoid silently checking only the first 1,000 existing events.
+    let existing=[],from=0;
+    while(true){
+      const {data,error}=await sb.from("events").select("id,title,city,venue,shared_organizer,start_at,continuous,link").range(from,from+499);
+      if(error)throw error;
+      existing.push(...data);from+=data.length;
+      if(data.length<500)break;
+      if(from>10000)throw Error("活動數量超出預覽檢查上限，請分批處理");
+    }
+    results=previewImport(items.map(item=>({...item,source_verified:$("verified").checked})),existing);
+    $("results").innerHTML=results.map(({candidate,result},i)=>`<section class="card"><label><input type="checkbox" data-i="${i}" ${result.state==="ready"?"":"disabled"}><b>${esc(candidate.title||"未命名")}</b></label><p class="${result.state==="ready"?"good":"bad"}">${esc(result.state)}</p><small>${esc([...result.errors,...result.warnings].join("；")||"檢查通過")}</small>${result.duplicates.length?`<p>疑似重複：${esc(result.duplicates.map(x=>x.title).join("、"))}</p>`:""}</section>`).join("");
+    $("status").textContent=`共 ${results.length} 筆；可建立 ${results.filter(x=>x.result.state==="ready").length} 筆。需人工確認的資料不可直接批次建立。`;
+    $("submit").disabled=!results.some(x=>x.result.state==="ready");
+  }catch(e){$("status").textContent="預覽失敗："+e.message}
+};
+$("submit").onclick=async()=>{
+  if(!admin)return;
+  const selected=[...document.querySelectorAll("input[data-i]:checked")].map(el=>results[Number(el.dataset.i)]).filter(x=>x?.result.state==="ready");
+  if(!selected.length)return;
+  if(!$("verified").checked){$("status").textContent="請先核對官方來源及報名狀態。";return;}
+  if(!confirm(`確定建立 ${selected.length} 筆待審核活動？不會公開發布。`))return;
+  $("submit").disabled=true;
+  let ok=0,fail=0;
+  const fields=["title","description","start_at","end_at","city","district","venue","address","age_min","age_max","fee","fee_note","link","photo","map_link","audience","flex_time","dates","continuous","schedule","shared_organizer","series_booking","recurrence_note","age_detail","age_min_month","age_max_month","booking_status","listing_type","visit_note","fee_type","fee_max"];
+  for(const {candidate} of selected){
+    const row={author_id:admin,status:"pending",ai_import_key:await importKey(candidate)};
+    for(const field of fields)if(candidate[field]!==undefined)row[field]=candidate[field];
+    // Client-side duplicate checks are advisory; re-check immediately before each insert.
+    const {data:matches,error:matchError}=await sb.from("events").select("id,title,link,city,venue,shared_organizer,start_at,continuous").eq("city",candidate.city).limit(1000);
+    if(matchError || previewImport([candidate],matches||[])[0].result.state!=="ready"){fail++;continue;}
+    const {error}=await sb.from("events").insert(row);
+    if(error){fail++;console.error("匯入失敗",error.code,error.message);if(error.code==="23505")$("status").textContent="有活動已被匯入，資料庫已阻擋重複寫入。";}else ok++;
+  }
+  $("status").textContent=`建立完成：${ok} 筆待審核、${fail} 筆失敗。請回管理後台審核，失敗時請確認欄位格式與權限。`;
+  $("preview").disabled=false;
+};
+verify();
+</script></body></html>
