@@ -25,7 +25,7 @@ const fs=require('fs'),assert=require('assert/strict'),vm=require('vm');
   await page.selectOption('#parenting-city','高雄市');assert.equal(await page.locator('article').count(),3);
   await page.selectOption('#parenting-city','新竹市');assert.equal(await page.locator('article').count(),2);
   await page.selectOption('#parenting-city','');assert.equal(await page.locator('article').count(),12);
-  assert(await page.locator('article a').evaluateAll(links=>links.every(a=>a.target==='_blank'&&a.rel.includes('noopener')&&a.textContent==='查看活動')));
+  assert(await page.locator('article a').evaluateAll(links=>links.every(a=>a.target==='_blank'&&a.rel.includes('noopener')&&a.textContent==='查看網站')));
   assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
   assert(await page.locator('article a').first().evaluate(a=>a.getBoundingClientRect().height>=44));
   await page.screenshot({path:'/tmp/parenting-'+width+'.png',fullPage:true});

@@ -2126,7 +2126,7 @@ function parentingResourceBrowse(records){
   const draw=()=>{
     const rows=parentingResourceRows(records,$("#parenting-city").value);
     $("#parenting-count").textContent=`共 ${rows.length} 個官方資源`;
-    $("#parenting-results").innerHTML=rows.length?`<div class="resource-grid parenting-resources">${rows.map(resource=>`<article class="next-resource-card"><div><h3>${esc(resource.name)}</h3><p class="mu">${esc(resource.city)}</p><p>${esc(resource.description)}</p></div><div class="next-resource-actions"><a class="event-official-button" href="${esc(resource.url)}" target="_blank" rel="noopener noreferrer">查看活動</a></div></article>`).join("")}</div>`:'<div class="empty-state"><p>目前沒有已確認的官方資源，請稍後再查看。</p></div>';
+    $("#parenting-results").innerHTML=rows.length?`<div class="resource-grid parenting-resources">${rows.map(resource=>`<article class="next-resource-card"><div><h3>${esc(resource.name)}</h3><p class="mu">${esc(resource.city)}</p><p>${esc(resource.description)}</p></div><div class="next-resource-actions"><a class="event-official-button" href="${esc(resource.url)}" target="_blank" rel="noopener noreferrer">查看網站</a></div></article>`).join("")}</div>`:'<div class="empty-state"><p>目前沒有已確認的官方資源，請稍後再查看。</p></div>';
   };
   $("#parenting-city").onchange=draw;
   draw();
