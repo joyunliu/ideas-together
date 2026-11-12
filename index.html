@@ -1045,6 +1045,11 @@ function dayLines(e,slots,focus,selectedDay){
 const EVENT_AGES=[["0–1 歲",0,1],["1–2 歲",1,2],["2–3 歲",2,3],["3–4 歲",3,4],["4–6 歲",4,6],["6 歲以上",6,12],["小一～小二",6,8],["小三～小四",8,10],["小五～小六",10,12]];
 const AGE_PRESETS=[["各年齡",0,12],...EVENT_AGES];
 const ageKey=(min,max)=>min+"-"+max;
+function ageInputMode(e){
+  if(e&&hasMonths(e))return "months";
+  if(e?.age_detail&&!AGE_PRESETS.some(([label])=>label===e.age_detail)&&e.age_detail!==`${e.age_min}–${e.age_max} 歲`)return "official";
+  return agePreset(e?.age_min??0,e?.age_max??12);
+}
 const agePreset=(min,max)=>AGE_PRESETS.some(([,a,b])=>a===min&&b===max)?ageKey(min,max):"custom";
 const BOOKING={walkin:"免報名",open:"有正取名額",waitlist:"僅候補",upcoming:"尚未開放",check:"請自行確認",full:"已額滿",cancelled:"已取消",postponed:"已延期"};
 const EVENT_TITLE_LIMIT=50;
@@ -1654,12 +1659,14 @@ function form(e,draft,template,append=false,adminEdit=false){
   <label>活動地點${imported?"（必填）":""}<input id="event-fv" maxlength="60" placeholder="例如：場館或店家名稱" value="${esc(e?.venue)}"></label>
   ${org?`<label>完整地址<input id="event-fad" maxlength="100" value="${esc(e?.address)}"></label>`:""}
   <label>地圖連結（選填，例如 Google 地圖的分享連結）<input id="event-fmp" type="url" maxlength="300" placeholder="https://" value="${esc(e?.map_link)}"></label></div>
-  <label>適合年齡<select id="event-age-preset">${imported?'<option value="">請確認適合年齡</option>':""}${AGE_PRESETS.map(([label,min,max])=>
-    `<option value="${ageKey(min,max)}" ${agePreset(e?.age_min??0,e?.age_max??12)===ageKey(min,max)?"selected":""}>${label}</option>`).join("")}
-    <option value="custom" ${e&&agePreset(e.age_min,e.age_max)==="custom"?"selected":""}>自訂年齡範圍</option></select></label>
+  <input id="event-age-mode-version" type="hidden" value="2">
+  <label>適合年齡<select id="event-age-preset">${imported?'<option value="">請選擇適合年齡</option>':""}${AGE_PRESETS.map(([label,min,max])=>
+    `<option value="${ageKey(min,max)}" ${ageInputMode(e)===ageKey(min,max)?"selected":""}>${label}</option>`).join("")}
+    ${[["custom","自訂年齡範圍"],["months","以月齡設定"],["official","其他年齡／學齡標示"]].map(([value,label])=>`<option value="${value}" ${ageInputMode(e)===value?"selected":""}>${label}</option>`).join("")}</select></label>
   <div id="event-custom-ages" hidden><div class="r"><label>建議年齡（起）<select id="event-fa1">${ages(e?e.age_min:0)}</select></label><label>建議年齡（迄）<select id="event-fa2">${ages(e?e.age_max:12)}</select></label></div></div>
-  <label>官方適齡標示（例如：小一至小三）<input id="event-age-detail" maxlength="40" value="${esc(e?.age_detail)}"></label>
-  <div class="r"><label>起始月齡（選填）<input id="event-age-min-month" type="number" min="0" max="155" value="${esc(e?.age_min_month)}"></label><label>結束月齡（選填）<input id="event-age-max-month" type="number" min="0" max="155" value="${esc(e?.age_max_month)}"></label></div>
+  <label id="event-official-age" hidden>年齡／學齡標示（例如：小一至小三）<input id="event-age-detail" maxlength="40" value="${esc(e?.age_detail)}"></label>
+  <div class="r" id="event-month-ages" hidden><label>起始月齡<input id="event-age-min-month" type="number" min="0" max="155" value="${esc(e?.age_min_month)}"></label><label>結束月齡<input id="event-age-max-month" type="number" min="0" max="155" value="${esc(e?.age_max_month)}"></label></div>
+  <p class="mu">依主辦方公告選擇一種年齡設定即可，不必重複填寫。</p>
   <label>參與對象<select id="event-fau">${imported?'<option value="" selected>請確認參與對象</option>':""}<option value="family" ${!imported&&(!e||e.audience==="family")?"selected":""}>親子（家長與孩子一起）</option><option value="kids" ${e&&e.audience==="kids"?"selected":""}>只有孩子（家長不需陪同）</option><option value="parents" ${e&&e.audience==="parents"?"selected":""}>只有家長（例如講座）</option></select></label>
   <div class="r"><label>費用類型<select id="event-fee-type">${[["free","免費"],["fixed","固定價格"],["range","多種票價"],["announcement","費用依公告"]].map(([k,v])=>`<option value="${k}" ${(e?feeType(e):imported?"fixed":"free")===k?"selected":""}>${v}</option>`).join("")}</select></label><label id="event-fee-free">費用（元）<input type="text" readonly value="0"></label><label id="event-fee-amount"><span id="event-fee-label">費用（元）</span><input id="event-ff" type="number" min="0" max="100000" value="${e&&["fixed","range"].includes(feeType(e))?e.fee:""}"></label><label id="event-fee-upper">最高票價（元）<input id="event-fee-max" type="number" min="0" max="100000" value="${esc(e?.fee_max??"")}"></label><label>費用說明（選填，例如：含材料費）<input id="event-fn" maxlength="60" value="${esc(e?.fee_note)}"></label></div>
   <div id="event-booking-field"><label><span id="event-booking-label">報名狀態</span><select id="event-booking" aria-describedby="event-booking-hint event-booking-check-hint">${bookingOptions(editing?.booking_status,imported?"請選擇報名狀態":"尚未確認")}</select></label>
@@ -1678,7 +1685,11 @@ function form(e,draft,template,append=false,adminEdit=false){
   </section>${postActions("event",imported?"加入待發布清單":adminEdit?"儲存公開活動":editing?"儲存並重新送審":"送出審核")}</div>`);
   const val=id=>$("#event-"+id)?.value.trim()||"";
   const ageMode=$("#event-age-preset"),file=()=>$("#event-fp").files[0];
-  const showAges=()=>{$("#event-custom-ages").hidden=ageMode.value!=="custom"};
+  const showAges=()=>{
+    $("#event-custom-ages").hidden=ageMode.value!=="custom";
+    $("#event-official-age").hidden=ageMode.value!=="official";
+    $("#event-month-ages").hidden=ageMode.value!=="months";
+  };
   const online=()=>val("format")==="online",shared=()=>val("source")==="shared";
   const showOptions=()=>{
     $("#event-place").hidden=online();
@@ -1687,12 +1698,13 @@ function form(e,draft,template,append=false,adminEdit=false){
     $("#event-fl").required=shared()||online()||org;
     $("#event-link-label").textContent=shared()?"主辦方的官方公告或報名連結（必填）":online()?"線上參加方式或報名連結（必填）":`報名或詳情連結（${org?"必填":"選填"}）`;
   };
-  const months=()=>[val("age-min-month"),val("age-max-month")];
+  const months=()=>ageMode.value==="months"?[val("age-min-month"),val("age-max-month")]:["",""];
+  const ageDetail=()=>ageMode.value==="official"?val("age-detail"):ageMode.value==="custom"?val("fa1")+"–"+val("fa2")+" 歲":
+    AGE_PRESETS.find(([,min,max])=>ageKey(min,max)===ageMode.value)?.[0]||null;
   const bounds=()=>{
     if(months().every(Boolean))return months().map(n=>Math.floor(Number(n)/12));
     if(imported&&val("fau")==="parents"&&!ageMode.value)return [0,12];
-    if(!ageMode.value&&val("age-detail"))return [0,12];
-    return ageMode.value==="custom"?[+val("fa1"),+val("fa2")]:ageMode.value.split("-").map(Number);
+    return ["custom","official"].includes(ageMode.value)?[+val("fa1"),+val("fa2")]:ageMode.value.split("-").map(Number);
   };
   const feeFields=()=>{
     const type=val("fee-type");
@@ -1720,6 +1732,10 @@ function form(e,draft,template,append=false,adminEdit=false){
       feeFields();
       fillDist(old.fields.find(x=>x.id==="event-fz")?.value);
       if(!old.fields.some(x=>x.id==="event-age-preset"))ageMode.value=agePreset(+val("fa1"),+val("fa2"));
+      if(!old.fields.some(field=>field.id==="event-age-mode-version")){
+        if(val("age-min-month")!==""||val("age-max-month")!=="")ageMode.value="months";
+        else if(val("age-detail"))ageMode.value="official";
+      }
       if(imported){
         $("#event-source").value="shared";
         $("#event-confirm-availability").checked=false;
@@ -1743,12 +1759,10 @@ function form(e,draft,template,append=false,adminEdit=false){
           if(imported&&!val("fau"))return "請確認活動是親子一起、孩子參加或家長參加。";
           const [min,max]=bounds(),fee=+val("ff"),link=val("fl"),map=val("fmp");
           const [from,to]=months();
-          if((from||to)&&(!/^\d+$/.test(from)||!/^\d+$/.test(to)||Number(to)>155||Number(from)>Number(to)))return "請填寫正確的起始與結束月齡。";
+          if(ageMode.value==="months"&&(!/^\d+$/.test(from)||!/^\d+$/.test(to)||Number(to)>155||Number(from)>Number(to)))return "請填寫正確的起始與結束月齡。";
+          if(ageMode.value==="official"&&!ageDetail())return "請填寫年齡／學齡標示，或改選年齡範圍。";
+          if(!ageMode.value&&val("fau")!=="parents")return "請選擇適合年齡。";
           if(!Number.isInteger(min)||!Number.isInteger(max)||min<0||max>12||max<min)return "請確認適合年齡的範圍。";
-          const ageDetail=val("age-detail");
-          if(imported&&val("fau")!=="parents"&&!from&&!ageDetail&&!ageMode.value)return "請填寫官方公告的適合年齡。";
-          if(shared()&&val("fau")!=="parents"&&/^(全齡|各年齡|不限|闔家|全家)$/.test(ageDetail))return "請填寫主辦方公告的具體年齡、月齡或年級。";
-          if(!editing&&shared()&&val("fau")!=="parents"&&!from&&!ageDetail&&min===0&&max===12)return "轉貼活動需填寫主辦方明確公告的年齡、月齡或年級。";
           if(["fixed","range"].includes(val("fee-type"))&&(!val("ff")||!Number.isInteger(fee)||fee<0||fee>100000||(val("fee-type")==="fixed"&&fee===0)))return "請填寫有效的價格；固定價格須大於 0。";
           if(val("fee-type")==="range"&&!val("fee-max"))return "請填寫最高票價。";
           const maxFee=+val("fee-max");
@@ -1772,7 +1786,7 @@ function form(e,draft,template,append=false,adminEdit=false){
         const [age_min,age_max]=bounds(),timing=readTiming(!!editing);
         const type=val("fee-type"),[from,to]=months();
         const age=Number.isInteger(age_min)&&Number.isInteger(age_max)?
-          ageTxt({age_min,age_max,age_detail:val("age-detail"),age_min_month:from?+from:null,age_max_month:to?+to:null}):"";
+          ageTxt({age_min,age_max,age_detail:ageDetail(),age_min_month:from?+from:null,age_max_month:to?+to:null}):"";
         const feeMissing=(type==="fixed"&&!val("ff"))||(type==="range"&&(!val("ff")||!val("fee-max")));
         const price=feeMissing?"費用待填":feeTxt({fee:+val("ff"),fee_type:type,fee_max:val("fee-max")?+val("fee-max"):null});
         box.textContent=[val("ft"),timing.row?(val("listing-type")==="exhibition"?exhibitionDates(timing.row)+" · "+exhibitionVisit(timing.row):tRange(timing.row)):"",online()?ONLINE:val("fc")+val("fz"),
@@ -1787,7 +1801,7 @@ function form(e,draft,template,append=false,adminEdit=false){
         const slotStates=slots=>(slots||[]).filter(slot=>slot.booking).map(({d,s,booking})=>[d,s,booking]);
         const statesChanged=booking!==(editing?.booking_status||null)||JSON.stringify(slotStates(timing.row.schedule))!==JSON.stringify(slotStates(editing?.schedule));
         const hasStatus=booking||slotStates(timing.row.schedule).length;
-        const row={...timing.row,age_detail:val("age-detail")||null,age_min_month:from?Number(from):null,age_max_month:to?Number(to):null,
+        const row={...timing.row,age_detail:ageDetail(),age_min_month:from?Number(from):null,age_max_month:to?Number(to):null,
           listing_type:val("listing-type")||null,related_exhibition_id:val("related-exhibition")||null,
           series_booking:!$("#event-series-field").hidden&&$("#event-series").checked&&eventSlots(timing.row).length>1,
           recurrence_note:!timing.row.flex_time&&!timing.row.continuous?val("recurrence")||null:null,
@@ -2306,18 +2320,23 @@ async function accountPage(){
   const uid=AUTH.u.id,tab=ACC.tab,hash=location.hash;
   const [, , attendance]=await Promise.all([G.ensure(),E.ensure(),tab==="attending"?E.attendanceList(uid):null]);
   if(AUTH.u?.id!==uid||ACC.tab!==tab||location.hash!==hash)return;
-  const gs=G.S,es=E.S,org=AUTH.me?.account_type==="organization",st={pending:"審核中",approved:"已發佈",rejected:"已退回"};
+  const gs=G.S,es=E.S,org=AUTH.me?.account_type==="organization",st={pending:"待審核",approved:"已核准",rejected:"已退回"};
   const myG=gs.games.filter(g=>g.author_id===uid),myE=es.ev.filter(e=>e.author_id===uid);
 
   const notice=(()=>{try{return sessionStorage.getItem("ideas_submission_notice")}catch(e){return null}})();if(notice){try{sessionStorage.removeItem("ideas_submission_notice")}catch(e){}}
   const fG=gs.games.filter(g=>g.status==="approved"&&gs.favs.some(f=>f.game_id===g.id&&f.user_id===uid));
   const fE=es.ev.filter(e=>e.status==="approved"&&es.efavs.some(f=>f.event_id===e.id&&f.user_id===uid));
-  const sc=x=>x.status!=="approved"?` · <b>${st[x.status]}</b>${x.reject_reason?"："+esc(x.reject_reason):""}`:" · 已發佈";
-  const gi=(g,mine)=>`<div class="cm"><a data-go="#/games/g/${g.id}"><b>${esc(g.title)}</b></a> <span class="mu">${G.AGES[g.age]||"未指定年齡"}${mine?sc(g):""}</span><div class="r">${mine?`<button data-a="g.edit" data-id="${g.id}">編輯</button><button class="d" data-a="g.delgame" data-id="${g.id}">刪除</button>`:`<button data-a="g.toggle" data-t="favs" data-id="${g.id}">取消收藏</button>`}</div></div>`;
-  const ei=(e,mine)=>`<div class="cm"><a data-go="#/events/e/${e.id}"><b>${esc(e.title)}</b></a> <span class="mu">${E.tRange(e)} · ${esc(e.city)}${mine?sc(e):""}</span><div class="r">${mine?`<button data-a="e.edit" data-id="${e.id}">編輯</button><button class="d" data-a="e.del" data-id="${e.id}">刪除</button>`:`<button data-a="e.toggle" data-t="event_favs" data-id="${e.id}">取消收藏</button>`}</div></div>`;
+  const sc=x=>x.status!=="approved"?` · <b>${st[x.status]}</b>${x.reject_reason?"："+esc(x.reject_reason):""}`:" · 已核准";
+  const gi=(g,mine)=>`<div class="cm">${mine?'<span class="t">遊戲</span> ':""}<a data-go="#/games/g/${g.id}"><b>${esc(g.title)}</b></a> <span class="mu">${G.AGES[g.age]||"未指定年齡"}${mine?sc(g):""}</span><div class="r">${mine?`<button data-a="g.edit" data-id="${g.id}">編輯</button><button class="d" data-a="g.delgame" data-id="${g.id}">刪除</button>`:`<button data-a="g.toggle" data-t="favs" data-id="${g.id}">取消收藏</button>`}</div></div>`;
+  const ei=(e,mine)=>`<div class="cm">${mine?'<span class="t">活動</span> ':""}<a data-go="#/events/e/${e.id}"><b>${esc(e.title)}</b></a> <span class="mu">${E.tRange(e)} · ${esc(e.city)}${mine?sc(e):""}</span><div class="r">${mine?`<button data-a="e.edit" data-id="${e.id}">編輯</button><button class="d" data-a="e.del" data-id="${e.id}">刪除</button>`:`<button data-a="e.toggle" data-t="event_favs" data-id="${e.id}">取消收藏</button>`}</div></div>`;
   const tb=(k,t)=>`<button data-a="a.tab" data-v="${k}" class="${ACC.tab===k?"on":""}">${t}</button>`;
   const none='<p class="mu">還沒有內容。</p>';
-  const posts=`${org?"":secOf(ACC.open,"pg","遊戲",myG.length,myG.map(g=>gi(g,1)).join("")||none)}${secOf(ACC.open,"pe","活動",myE.length,myE.map(e=>ei(e,1)).join("")||none)}${org?'<p class="mu">商家／機構帳號只能發佈活動。</p>':""}`;
+  const posts=["approved","pending","rejected"].map(status=>{
+    const games=org?[]:myG.filter(g=>g.status===status),events=myE.filter(e=>e.status===status);
+    const count=games.length+events.length;
+    if(status==="rejected"&&!count)return "";
+    return secOf(ACC.open,"posts-"+status,st[status],count,games.map(g=>gi(g,1)).join("")+events.map(e=>ei(e,1)).join("")||none);
+  }).join("")+(org?'<p class="mu">商家／機構帳號只能發佈活動。</p>':"");
   const favs=`${secOf(ACC.open,"fg","遊戲",fG.length,fG.map(g=>gi(g,0)).join("")||none)}${secOf(ACC.open,"fe","活動",fE.length,fE.map(e=>ei(e,0)).join("")||none)}`;
   $("#app").innerHTML=`${notice?`<div class="notice-banner">✓ ${esc(notice)} 目前狀態可在下方「我的投稿」查看。</div>`:""}${AUTH.me?.suspended?`<p class="rule">你的帳號已被停權，無法投稿、留言或互動。如有疑問請來信 ${MAIL}。</p>`:""}
   <h2 style="margin:6px 8px 12px">我的帳號</h2>

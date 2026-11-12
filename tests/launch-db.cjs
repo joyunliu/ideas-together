@@ -93,6 +93,12 @@ await insertTime({schedule:[{d:"2026-12-01",s:"09:00",e:null}]});
 await assert.rejects(insertTime({continuous:true,end_at:null}),/跨日連續/);
 await assert.rejects(insertTime({end_at:"2026-12-01T08:00:00+08:00"}),/結束時間需晚於/);
 await assert.rejects(insertTime({schedule:[{d:"2026-12-01",s:"09:00",e:"08:00"}]}),/每場活動的日期與時間/);
+// A single age choice supplies its own display label; no duplicate official text is needed.
+await insertTime({age_min:0,age_max:12,age_detail:'各年齡'});
+await insertTime({age_min:3,age_max:4,age_detail:'3–4 歲'});
+await insertTime({age_min:2,age_max:5,age_detail:'2–5 歲'});
+await insertTime({age_min:0,age_max:1,age_min_month:6,age_max_month:18,age_detail:null});
+console.log('PASS: unified age presets, all ages, custom ranges and months satisfy the existing import trigger');
 console.log("PASS: imported events accept optional end times and reject invalid or missing required end times");
 // Mirror the production event policies relevant to submitting and reviewing.
 await db.exec(`
