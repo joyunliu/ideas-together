@@ -4,6 +4,8 @@ on:
     paths:
       - 'admin/official-discovery.js'
       - 'tests/official-discovery.test.mjs'
+      - 'tests/official-admin-drafts.test.mjs'
+      - 'admin/ai-import.html'
       - '.github/workflows/official-discovery-tests.yml'
   push:
     branches: [main]
@@ -18,4 +20,4 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: node --test tests/official-discovery.test.mjs
+      - run: node --test tests/official-discovery.test.mjs tests/official-admin-drafts.test.mjs
