@@ -21,6 +21,10 @@ export function inspectEvent(candidate, existing=[]) {
   const title=String(candidate.title??"").trim(), city=String(candidate.city??"").trim();
   if (!title || title.length>LIMITS.title) errors.push("活動名稱必填，最多50字");
   if (!city) errors.push("縣市必填");
+  if (!String(candidate.description??"").trim()) errors.push("活動介紹必填");
+  if (candidate.continuous && !candidate.recurrence_note && !candidate.schedule) errors.push("常態活動須有時段或更新方式");
+  if (["full","cancelled"].includes(candidate.booking_status)) errors.push("額滿或取消的活動不得批次匯入");
+  if (candidate.status && candidate.status!=="pending") errors.push("只允許建立待審核活動");
   for (const [field,max] of Object.entries(LIMITS)) {
     if (field==="title") continue;
     if (candidate[field]!=null && String(candidate[field]).length>max) errors.push(`${field} 超過 ${max} 字`);
@@ -34,10 +38,11 @@ export function inspectEvent(candidate, existing=[]) {
   if (candidate.listing_type && !allowedTypes.has(candidate.listing_type)) errors.push("活動分類無效");
   if (candidate.audience && !allowedAudience.has(candidate.audience)) errors.push("參加對象無效");
   const url=canonicalUrl(candidate.link);
+  if (candidate.source_verified!==true) warnings.push("官方／公共來源尚未經人工驗證");
   if (!url) errors.push("缺少有效官方活動連結");
-  if (!candidate.description) warnings.push("缺少活動介紹");
-  if (candidate.continuous && !candidate.recurrence_note && !candidate.schedule) warnings.push("常態活動未標明固定時段或更新方式");
-  if (candidate.booking_status==="full" || candidate.booking_status==="cancelled") warnings.push("額滿或取消：不得自動發布");
+  
+  
+  
   const name=normalize(title), place=normalize(candidate.venue), organizer=normalize(candidate.shared_organizer);
   const duplicates=existing.filter(row=>{
     const otherUrl=canonicalUrl(row.link);
