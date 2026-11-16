@@ -27,6 +27,12 @@ const national=ctx.nationalCandidates([
   {title:"金門親子活動",startDate:"2026/11/14",endDate:"2026/11/14",sourceWebPromote:"https://example.org/kinmen",showInfo:[{location:"金門縣金城鎮"}]}
 ],now);
 assert.equal(Array.from(national,row=>row.city).join(","),"花蓮縣,金門縣");
+const morning={title:"親子共讀",startDate:"2026/11/11",endDate:"2026/11/11",
+  sourceWebPromote:"https://example.org/library",showInfo:[
+    {time:"2026/11/11 09:00:00",endTime:"2026/11/11 11:00:00",location:"新北市板橋區"}]};
+assert.equal(ctx.nationalCandidates([morning],now).length,0);
+assert.equal(ctx.nationalCandidates([{...morning,showInfo:[...morning.showInfo,
+  {time:"2026/11/11 14:00:00",endTime:"2026/11/11 15:00:00",location:"新北市板橋區"}]}],now)[0].details.schedule[0].s,"14:00");
 (async()=>{
   const request={method:"POST",headers:new Headers({authorization:"Bearer test"})};
   assert.equal((await run(request)).status,403);

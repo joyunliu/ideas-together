@@ -1,5 +1,7 @@
 const SOURCE = "https://www.gov.taipei/OpenData.aspx?SN=DD102593FDB1A032";
 const NATIONAL = "https://cloud.culture.tw/frontsite/trans/SearchShowAction.do?method=doFindTypeJ&category=4";
+const NATIONAL_ALL = NATIONAL.replace("category=4","category=all");
+const NATIONAL_FALLBACKS = [NATIONAL,NATIONAL.replace("category=4","category=6"),NATIONAL.replace("category=4","category=15")];
 const SNAPSHOT = "https://raw.githubusercontent.com/joyunliu/ideas-together/culture-feed/culture-feed.json";
 const headers = {
   "Access-Control-Allow-Origin": "https://joyunliu.github.io",
@@ -10,7 +12,7 @@ const headers = {
 const json = (data: unknown, status = 200) => Response.json(data, {status, headers});
 const clean = (value: unknown) => typeof value === "string"
   ? value.replace(/<[^>]*>/g, " ").replace(/&nbsp;|&#160;/gi, " ").replace(/\s+/g, " ").trim() : "";
-const family = /親子|家長|孩子|孩童|兒童|幼兒|小朋友|國小|幼兒園|寶寶/;
+const family = /親子|家長|孩子|孩童|兒童|幼兒|小朋友|國小|幼兒園|寶寶|學齡前|繪本故事|故事時間|兒童劇/;
 const localTime = (value: unknown) => typeof value === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?$/.test(value)
   ? Date.parse(value + "+08:00") : NaN;
 const taipeiDay = (time: number) => new Date(time + 8 * 3600000).toISOString().slice(0,10);
@@ -32,7 +34,7 @@ function candidates(source: Record<string, unknown>[], now: number) {
     const description = clean(row["內容"]);
     const audience = clean(row["限制對象"]);
     const evidence = family.test(audience) ? audience : family.test(title) ? title :
-      description.match(/(?:參加對象|活動對象|適合對象|適合|歡迎)[^。！？\n]{0,25}(?:親子|家長|孩子|孩童|兒童|幼兒|小朋友|國小|幼兒園|寶寶)[^。！？\n]{0,25}/)?.[0];
+      description.match(/(?:參加對象|活動對象|適合對象|適合|歡迎)[^。！？\n]{0,25}(?:親子|家長|孩子|孩童|兒童|幼兒|小朋友|國小|幼兒園|寶寶|學齡前)[^。！？\n]{0,25}/)?.[0];
     const first = localTime(row["活動開始時間"]);
     const last = localTime(row["活動結束時間"]);
     const organizer = clean(row["主辦單位"]);
@@ -54,10 +56,10 @@ function candidates(source: Record<string, unknown>[], now: number) {
       city: "台北市", venue: clean(row["地點"]).slice(0,60), first_day:d, last_day,
       audience_evidence:evidence.slice(0,160),
       review_note:publisher ? "來源：臺北市政府公開活動｜發布單位：" + publisher.slice(0,100) : "來源：臺北市政府公開活動",
-      details:{description:description.slice(0,800),district,address:address.slice(0,100),fee_note:clean(row["費用"]).slice(0,60),
+      details:{ends_at:new Date(last).toISOString(),description:description.slice(0,800),district,address:address.slice(0,100),fee_note:clean(row["費用"]).slice(0,60),
         schedule:d===last_day&&first>now&&last>first?[{d,s:String(row["活動開始時間"]).slice(11,16),e:String(row["活動結束時間"]).slice(11,16)}]:[]},
     }];
-  }).sort((a,b)=>a.first_day.localeCompare(b.first_day)).slice(0,50);
+  });
 }
 
 function nationalCandidates(source: Record<string, unknown>[], now: number) {
@@ -71,7 +73,7 @@ function nationalCandidates(source: Record<string, unknown>[], now: number) {
        last_day<today||first_day>lastAllowed||last_day<first_day)return [];
     const description=clean(row.descriptionFilterHtml);
     const evidence=family.test(title)?title:
-      description.match(/(?:參加對象|活動對象|適合對象|適合|歡迎)[^。！？]{0,25}(?:親子|家長|孩子|孩童|兒童|幼兒|小朋友|國小|幼兒園|寶寶)[^。！？]{0,25}/)?.[0];
+      description.match(/(?:參加對象|活動對象|適合對象|適合|歡迎)[^。！？]{0,25}(?:親子|家長|孩子|孩童|兒童|幼兒|小朋友|國小|幼兒園|寶寶|學齡前)[^。！？]{0,25}/)?.[0];
     if(!evidence)return [];
     let link="";
     for(const value of [row.sourceWebPromote,row.webSales]){
@@ -84,40 +86,49 @@ function nationalCandidates(source: Record<string, unknown>[], now: number) {
     }
     if(!link)return [];
     const slots=Array.isArray(row.showInfo)?row.showInfo.filter(slot=>slot&&typeof slot==="object"):[];
-    const slot=slots.find(slot=>date(slot.time).slice(0,10)>=today)||slots[0];
+    const knownEnds=slots.map(slot=>localTime(date(slot.endTime).replace(" ","T")));
+    const exactEnd=knownEnds.length&&knownEnds.every(Number.isFinite)
+      ? knownEnds.reduce((latest,end)=>Math.max(latest,end),0) : NaN;
+    if(Number.isFinite(exactEnd)&&taipeiDay(exactEnd)===last_day&&exactEnd<=now)return [];
+    const slot=slots.find(slot=>localTime(date(slot.endTime).replace(" ","T"))>now)||
+      slots.find(slot=>date(slot.time).slice(0,10)>=today)||slots[0];
     const address=clean(slot?.location).replaceAll("臺","台");
     const city=address.match(cityName)?.[0]||"";
     const district=city?address.slice(address.indexOf(city)+city.length).trimStart().match(/^([^\s區]{1,4}區)/)?.[1]||"":"";
     const venue=clean(slot?.locationName);
     const schedule=slots.filter(s=>clean(s.locationName)===venue&&clean(s.location).replaceAll("臺","台")===address).flatMap(s=>{
       const first=date(s.time).replace(" ","T"),last=date(s.endTime).replace(" ","T");
-      if(!(localTime(first)>now)||!(localTime(last)>localTime(first))||first.slice(0,10)!==last.slice(0,10)||
+      if(!(localTime(last)>now)||!(localTime(last)>localTime(first))||first.slice(0,10)!==last.slice(0,10)||
          first.slice(11,16)==="00:00"||last.slice(11,16)==="23:59")return [];
       return [{d:first.slice(0,10),s:first.slice(11,16),e:last.slice(11,16)}];
     }).slice(0,20);
     return [{
-      source_url:link,title:title.slice(0,140),organizer:(Array.isArray(row.masterUnit)?row.masterUnit:[row.masterUnit]).map(clean).filter(Boolean).join("、").slice(0,100),
+      source_url:link,source_feed:"culture",title:title.slice(0,140),organizer:(Array.isArray(row.masterUnit)?row.masterUnit:[row.masterUnit]).map(clean).filter(Boolean).join("、").slice(0,100),
       city,venue:venue.slice(0,60),first_day,last_day,audience_evidence:evidence.slice(0,160),
       review_note:"來源：文化部全國親子活動開放資料",
-      details:{description:description.slice(0,800),address:address.slice(0,100),district,schedule,fee_note:clean(slot?.price).slice(0,60)},
+      details:{exhibition:String(row.category)==="6",ends_at:Number.isFinite(exactEnd)&&taipeiDay(exactEnd)===last_day?new Date(exactEnd).toISOString():null,
+        description:description.slice(0,800),address:address.slice(0,100),district,schedule,fee_note:clean(slot?.price).slice(0,60)},
     }];
   });
 }
 
 async function readSource(url: string) {
-  const response=await fetch(url,{headers:{Accept:"application/json"},cache:"no-store",signal:AbortSignal.timeout(6500)});
+  const response=await fetch(url,{headers:{Accept:"application/json"},cache:"no-store",signal:AbortSignal.timeout(4000)});
   if(!response.ok)throw new Error("source unavailable");
   return await response.json();
 }
 
 async function readNational(){
   try{
-    const rows=await readSource(NATIONAL);
-    if(Array.isArray(rows))return {rows,backup:false};
-  }catch{/* Use the last successful nationwide snapshot when the live feed fails. */}
+    const rows=await readSource(NATIONAL_ALL);
+    if(Array.isArray(rows)&&rows.length)return {rows,mode:"all"};
+  }catch{/* Continue to the individual categories. */}
+  const categories=await Promise.allSettled(NATIONAL_FALLBACKS.map(url=>readSource(url)));
+  const rows=categories.flatMap(result=>result.status==="fulfilled"&&Array.isArray(result.value)?result.value:[]);
+  if(rows.length)return {rows,mode:"partial"};
   const snapshot=await readSource(SNAPSHOT);
   if(!Array.isArray(snapshot?.items))throw new Error("snapshot unavailable");
-  return {rows:snapshot.items,backup:true};
+  return {rows:snapshot.items,mode:"snapshot"};
 }
 
 Deno.serve(async request => {
@@ -139,9 +150,9 @@ Deno.serve(async request => {
     const nationwide=national.status==="fulfilled"?national.value:null;
     if(!nationwide&&!taipeiRows)return json({error:"source_unavailable"},502);
     const rows=[...(nationwide?nationalCandidates(nationwide.rows,now):[]),...(taipeiRows?candidates(taipeiRows,now):[])];
-    const unique=[...new Map(rows.map(row=>[row.source_url,row])).values()].sort((a,b)=>a.first_day.localeCompare(b.first_day));
+    const unique=[...new Map(rows.map(row=>[[row.source_url,row.title,row.city,row.venue,row.first_day].join("|"),row])).values()].sort((a,b)=>a.first_day.localeCompare(b.first_day));
     return json({rows:unique,checked:(nationwide?.rows.length||0)+(taipeiRows?.length||0),updated_at:new Date(now).toISOString(),
-      national_source:nationwide?(nationwide.backup?"snapshot":"live"):"unavailable",taipei_source:!!taipeiRows});
+      national_source:nationwide?.mode||"unavailable",taipei_source:!!taipeiRows});
   } catch {
     return json({error:"source_unavailable"},502);
   }
