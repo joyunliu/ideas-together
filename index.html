@@ -2545,7 +2545,7 @@ async function adminPage(){
     </div>
     <p class="mu">點選數字跳到對應區塊。數字以目前載入的資料為準，— 表示暫時無法讀取。</p>
   </section>
-  ${!AUTH.me.suspended?`<div class="card-box"><h3 style="margin-top:0">匯入親子活動</h3><p class="mu">依縣市與日期找公開活動，再貼上主辦方公告或報名網址。</p><div class="r"><button class="p" data-a="x.webCandidates">搜尋或匯入活動</button></div><div id="culture-drafts"></div><p class="mu" style="margin-top:12px"><a href="admin/ai-import.html" target="_blank" rel="noopener">AI 活動批次匯入預覽（測試版）</a></p></div>`:""}
+  ${!AUTH.me.suspended?`<div class="card-box"><h3 style="margin-top:0">匯入親子活動</h3><p class="mu">搜尋近期活動、編輯雲端草稿，或貼上活動網址。</p><div class="r"><button class="p" data-a="x.webCandidates">搜尋或匯入活動</button></div><div id="culture-drafts"></div></div>`:""}
   <div id="event-import-queue" data-admin-target="imports" tabindex="-1"></div>
   <section class="admin-group" aria-labelledby="admin-review-title"><h3 id="admin-review-title">投稿審核與回報</h3>
     ${section("ar","待處理回報",count(openReports,reportError),reportError?'<p class="mu">無法讀取回報，請稍後再試。</p>':openReports.map(rItem).join("")||'<p class="mu">沒有待處理的回報。</p>')}
@@ -2600,11 +2600,26 @@ function webActivityQuery(city,first,last){
   const place=[...new Set(cities)].join(" OR ");
   return `(${place}) (親子活動 OR 親子館 OR 兒童活動 OR 親子共讀) (${terms.join(" OR ")})`;
 }
-ACT["x.webCandidates"]=()=>{
-  const allowed=()=>Boolean(AUTH.me?.is_admin&&!AUTH.me.suspended);
+ACT["x.webCandidates"]=async()=>{
+  const userId=AUTH.u?.id;
+  const allowed=()=>Boolean(userId&&AUTH.u?.id===userId&&AUTH.me?.is_admin&&!AUTH.me.suspended);
   if(!allowed())return;
   const today=E.ymd(E.taipeiToday());
-  modal(`<h3>搜尋或匯入親子活動</h3>
+  modal('<div id="activity-import"><p role="status">載入活動匯入中…</p></div>');
+  const root=$("#activity-import");
+  try{
+    const {mountActivityImport}=await import("./admin/activity-import.js");
+    if(!root.isConnected||!allowed())return;
+    mountActivityImport(root,{sb,userId,cities:E.CITIES,canManage:allowed,onSubmitted:()=>{
+      E.reset();
+      ROUTE(true);
+    }});
+  }catch{
+    root.textContent="載入活動匯入失敗，請關閉後重新開啟。";
+    return;
+  }
+  root.querySelector("#activity-link").innerHTML=`
+    <details class="advanced"><summary>用 Google 依日期搜尋</summary>
     <form id="web-search-form" action="https://www.google.com/search" method="get" target="_blank" rel="noopener noreferrer">
       <label>縣市<select id="web-search-city" required><option value="">選擇縣市</option>${E.CITIES.map(city=>`<option value="${esc(city)}">${esc(city)}</option>`).join("")}</select></label>
       <div class="r">
@@ -2614,15 +2629,14 @@ ACT["x.webCandidates"]=()=>{
       <input type="hidden" name="q">
       <p class="mu">搜尋會帶入縣市與日期關鍵字。較長的區間會以月份或年份搜尋，請到原始公告核對實際場次。</p>
       <button type="submit" class="p">開啟 Google 搜尋 ↗</button>
-    </form>
-    <hr>
+    </form></details>
     <form id="web-link-form">
       <label>活動來源網址<input type="url" id="web-link" maxlength="1000" placeholder="https://" required></label>
       <p class="mu">貼上主辦方公告或報名頁。也可以貼上公告文字，先帶入辨識到的欄位，再核對草稿。</p>
       <label>公告文字（選填）<textarea id="web-link-text" rows="6" maxlength="12000" placeholder="活動名稱：親子故事時間&#10;日期：2026/11/21&#10;上午場：10:30–12:00&#10;地點：活動大廳&#10;費用：免費"></textarea></label>
       <p id="web-link-status" class="mu" role="status"></p>
       <button type="submit" class="p">開啟活動草稿</button>
-    </form>`);
+    </form>`;
   const search=$("#web-search-form"),start=$("#web-search-start"),end=$("#web-search-end");
   start.oninput=()=>{
     end.min=start.value;

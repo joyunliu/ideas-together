@@ -68,3 +68,13 @@ export function previewImport(candidates,existing=[]) {
   }
   return results;
 }
+
+export async function importKey(item){
+  const url=new URL(item.link);
+  url.hash="";
+  for(const key of [...url.searchParams.keys()])if(/^(utm_|fbclid$|gclid$)/i.test(key))url.searchParams.delete(key);
+  const identity=[url.href.replace(/\/$/,""),item.title,item.start_at,item.city,item.venue||""]
+    .map(value=>String(value??"").normalize("NFKC").trim().toLowerCase()).join("\u001f");
+  const bytes=new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(identity)));
+  return "v1:"+Array.from(bytes,b=>b.toString(16).padStart(2,"0")).join("");
+}

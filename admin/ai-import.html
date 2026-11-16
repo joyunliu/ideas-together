@@ -4,7 +4,7 @@
 </details><p><label><input id="verified" type="checkbox"> 我已逐筆核對活動主辦方、官方來源、場次及報名狀態（只適用於本批資料）</label></p><div><button id="preview" disabled>檢查與預覽</button><button id="submit" disabled>建立勾選的待審核活動</button></div><p id="status" role="status"></p><div id="results"></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script type="module">
-import {previewImport} from "./ai-event-import-preview.js";
+import {importKey,previewImport} from "./ai-event-import-preview.js";
 import {prepareDiscovery} from "./official-discovery.js";
 const sb=supabase.createClient("https://impuxatitpghslleasma.supabase.co","sb_publishable_bufFrNEhfUMxuwNmFOosRg_rPiekiNf");
 const $=id=>document.getElementById(id), esc=x=>String(x??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -62,15 +62,6 @@ function renderDiscovered(){
   const use=$("use-discovered");if(use)use.onclick=addSelectedAsDrafts;
 }
 $("region").onchange=$("category").onchange=()=>{if(sourceStatus)renderDiscovered()};
-async function importKey(item){
-  const url=new URL(item.link);
-  url.hash="";
-  for(const key of [...url.searchParams.keys()])if(/^(utm_|fbclid$|gclid$)/i.test(key))url.searchParams.delete(key);
-  const identity=[url.href.replace(/\/$/,""),item.title,item.start_at,item.city,item.venue||""]
-    .map(x=>String(x??"").normalize("NFKC").trim().toLowerCase()).join("\u001f");
-  const bytes=new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(identity)));
-  return "v1:"+Array.from(bytes,b=>b.toString(16).padStart(2,"0")).join("");
-}
 async function verify(){
   $("auth").textContent="正在確認管理員身分…";
   $("discover").disabled=true;
