@@ -550,7 +550,7 @@ function submissionSuccess(type,ctx){
   }
   const imported=type==="event"&&ctx.extra().culture&&AUTH.me?.is_admin;
   const msg=imported?"已加入建議清單，可在審核頁核對並發布。":type==="game"?"遊戲投稿已送出，審核通過後就會公開。":"活動投稿已送出，審核通過後就會公開。";
-  if(ctx.extra().adminEdit){if(activeDraft===ctx){ctx.submitting=false;shut();E.reset();go("#/admin");showToast("已更新公開活動。")}return}
+  if(ctx.extra().adminEdit){if(activeDraft===ctx){ctx.submitting=false;shut();E.reset();go("#/admin");ROUTE(true);showToast("活動已儲存。")}return}
   if(!imported)analytics.event("submit_content",{content_type:type});
   if(!imported)try{sessionStorage.setItem("ideas_submission_notice",msg)}catch(e){}
   if(activeDraft===ctx){
