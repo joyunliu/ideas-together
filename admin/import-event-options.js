@@ -3,7 +3,7 @@ const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;
 const local=value=>Number.isFinite(Date.parse(value))?new Date(Date.parse(value)+28800000).toISOString().slice(0,16):'';
 export function mountImportEventOptions(form,item){
  const select=(name,label,choices,value)=>`<label>${label}<select name="${name}">${Object.entries(choices).map(([v,l])=>`<option value="${v}" ${v===value?'selected':''}>${l}</option>`).join('')}</select></label>`;
- const mode=item.schedule?.length?'sessions':item.listing_type==='resource'||item.flex_time||item.recurrence_note&&!item.end_at?'recurring':item.continuous||local(item.start_at).slice(0,10)!==local(item.end_at||item.start_at).slice(0,10)?'range':'single';
+ const mode=item.schedule?.length||item.dates?.length>1&&!item.continuous&&item.listing_type!=='exhibition'?'sessions':item.listing_type==='resource'||item.flex_time||item.recurrence_note&&!item.end_at?'recurring':item.continuous||local(item.start_at).slice(0,10)!==local(item.end_at||item.start_at).slice(0,10)?'range':'single';
  const feeType=item.fee_type||(item.fee===0?'free':item.fee!=null?'fixed':'');
  const host=document.createElement('div');host.innerHTML=`<div class="r">${select('listing_type','活動分類',{event:'活動',exhibition:'展覽',resource:'常態活動／資源'},item.listing_type||'event')}${select('timing_mode','日期與場次',{single:'單日活動',range:'跨日／展期',sessions:'多場次（每場獨立時間）',recurring:'常態／預約活動'},mode)}</div>
  <div data-sessions hidden><h4>活動場次</h4><div data-session-rows></div><button type="button" data-add-session>新增場次</button></div>
