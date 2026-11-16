@@ -1,3 +1,4 @@
+import {mountImportEventOptions} from "./import-event-options.js";
 import {prepareDiscovery} from "./official-discovery.js";
 import {importKey,inspectEvent} from "./ai-event-import-preview.js";
 
@@ -134,6 +135,7 @@ export function mountActivityImport(root,{sb,userId,cities,canManage,onSubmitted
       <div class="r"><button type="submit" class="p">送審</button><button type="button" data-save-draft>儲存草稿</button></div>
     </form>`;
     const form=$("#activity-editor form");
+    const collectOptions=mountImportEventOptions(form,item);
     form.scrollIntoView({block:"start"});
     const message=text=>{form.querySelector("[data-editor-status]").textContent=text};
     const collect=()=>{
@@ -143,16 +145,7 @@ export function mountActivityImport(root,{sb,userId,cities,canManage,onSubmitted
         candidate[key]=type==="number"?(value===""?undefined:Number(value)):
           type==="datetime-local"?(value?value+":00+08:00":undefined):value;
       }
-      if(Array.isArray(candidate.schedule)&&Date.parse(candidate.start_at)!==Date.parse(item.start_at)){
-        const old=localDateTime(item.start_at);
-        const next=localDateTime(candidate.start_at);
-        const slot=candidate.schedule.find(row=>row.d===old.slice(0,10)&&row.s===old.slice(11));
-        if(slot&&next){
-          const day=next.slice(0,10),start=next.slice(11);
-          candidate.schedule=candidate.schedule.map(row=>row===slot?{d:day,s:start,e:row.e>start?row.e:""}:row);
-        }
-      }
-      return candidate;
+      return collectOptions(candidate);
     };
     const save=async candidate=>{
       const values={title:candidate.title,payload:candidate,source_url:candidate.link||null,updated_at:new Date().toISOString()};
@@ -165,7 +158,8 @@ export function mountActivityImport(root,{sb,userId,cities,canManage,onSubmitted
       if(!permitted())return;
       const controls=[...form.querySelectorAll("button")];
       if(controls.some(button=>button.disabled))return;
-      const candidate=collect();
+      let candidate;
+      try{candidate=collect()}catch(error){message(error.message);return;}
       for(const button of controls)button.disabled=true;
       for(const tab of tabs)tab.disabled=true;
       message(send?"檢查並送審中…":"儲存中…");
