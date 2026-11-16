@@ -597,12 +597,13 @@ async function savePost(ctx,table,row,files,previous,photoFields,importOrigin){
     if(AUTH.u?.id!==ctx.uid)throw new Error("登入狀態已變更，請重新登入。");
     const adminEdit=ctx.extra().adminEdit;
     if(adminEdit&&(!AUTH.me?.is_admin||AUTH.me.suspended))throw new Error("沒有活動管理權限。");
-    const data={...row,...photoFields(files.length?uploaded:previous),...(adminEdit?{}:{status:"pending",reject_reason:null})};
+    if(adminEdit&&ctx.targetStatus!=="draft"&&E.eventExpired(row))throw new Error("活動已結束，請修正日期或儲存草稿。");
+    const data={...row,...photoFields(files.length?uploaded:previous),...(adminEdit?{status:ctx.targetStatus||"approved"}:{status:"pending",reject_reason:null})};
     const result=importOrigin
       ?await sb.rpc("submit_verified_event_import",{p_event:data,p_source_url:importOrigin.link,
         p_culture_uid:importOrigin.uid,p_audience_evidence:importOrigin.evidence})
       :ctx.postId
-      ?await (adminEdit?sb.from(table).update(data).eq("id",ctx.postId).eq("status","approved").is("archived_at",null):sb.from(table).update(data).eq("id",ctx.postId)).select("id").single()
+      ?await (adminEdit?sb.from(table).update(data).eq("id",ctx.postId).is("archived_at",null):sb.from(table).update(data).eq("id",ctx.postId)).select("id").single()
       :await sb.from(table).insert({...data,author_id:ctx.uid});
     if(result.error){
       // A lost response can leave the outcome unknown. Keep potentially referenced files.
@@ -950,6 +951,22 @@ function eventSlots(e){
   return schedule.map(x=>({...x,until:eventTime(x.d,x.e||"23:59:59")}))
     .sort((a,b)=>a.d.localeCompare(b.d)||a.s.localeCompare(b.s));
 }
+// Keep this boundary aligned with public.event_effective_end.
+const effectiveEnd=e=>{
+ if(e.listing_type==="resource"||e.booking_status==="postponed")return null;
+ if(e.schedule?.length){
+  const slots=e.schedule.filter(x=>x.booking!=="cancelled");
+  if(!slots.length||slots.some(x=>x.booking==="postponed"||!/^\d{4}-\d{2}-\d{2}$/.test(x.d)||x.e&&!/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/.test(x.e)))return null;
+  const values=slots.map(x=>+eventTime(x.d,x.e||"23:59:59"));
+  return values.every(Number.isFinite)?Math.max(...values):null;
+ }
+ if(e.recurrence_note&&!e.end_at)return null;
+ let end=e.end_at?Date.parse(e.end_at):e.start_at&&!e.flex_time?+eventTime(ymd(taipeiDate(e.start_at)),"23:59:59"):null;
+ const last=e.dates?.slice().sort().at(-1);
+ if(last&&(end===null||last>ymd(taipeiDate(end))))end=+eventTime(last,"23:59:59");
+ return Number.isFinite(end)?end:null;
+};
+const eventExpired=(e,now=Date.now())=>{const end=effectiveEnd(e);return end!==null&&end<+now};
 const windowEnd=now=>{
   const d=taipeiDate(now), y=d.getFullYear(),m=d.getMonth()+3;
   return ymd(new Date(y,m,Math.min(d.getDate(),new Date(y,m+1,0).getDate())));
@@ -959,7 +976,7 @@ const upcomingSlots=(e,now=new Date())=>{
   const last=listingType(e)==="event"?windowEnd(now):null;
   return eventSlots(e).filter(slot=>slot.until>=now&&(!last||slot.d<=last));
 };
-const publiclyListed=e=>!e.archived_at&&(listingType(e)==="exhibition"?!exhibitionEnded(e):
+const publiclyListed=e=>!e.archived_at&&!eventExpired(e)&&(listingType(e)==="exhibition"?!exhibitionEnded(e):
   listingType(e)==="resource"&&!e.flex_time?true:upcomingSlots(e).length>0);
 const nextEventDate=e=>{
   const slot=upcomingSlots(e)[0];
@@ -982,7 +999,7 @@ const LISTING_TYPES={event:"單場與短期活動",exhibition:"展覽",resource:
 const MAX_SESSIONS=60;
 const listingType=e=>e.listing_type||(e.flex_time||e.recurrence_note&&!e.series_booking?"resource":"event");
 const exhibitionPeriod=e=>[ymd(taipeiDate(e.start_at)),ymd(taipeiDate(e.end_at||e.start_at))];
-const exhibitionEnded=e=>e.end_at?Date.parse(e.end_at)<Date.now():exhibitionPeriod(e)[1]<ymd(taipeiToday());
+const exhibitionEnded=e=>eventExpired(e);
 // Keep timing and closure options in the existing human-readable visit_note field.
 // Exact generated lines are reserved; all other notes (including legacy notes) are retained.
 function visitSettings(e){
@@ -1616,7 +1633,7 @@ function kindUI(){const k=(document.querySelector("[name=event-fk]:checked")||{}
   $("#lbe").textContent=exhibition?"每日開放時間（結束）":k==="single"?"結束時間（選填）":cont?"最後一天的結束時間":"每天結束時間（選填）";
   $("#khint").textContent=exhibition?"展覽可選單日或長期日期範圍。每日開放時間可填，未定時間可勾選「無特定時間」；休館日另行設定。":{"":"請先選擇活動類型，再填寫日期與時間。",single:"單日活動：只在一天舉辦。",dates:"多日活動：選出舉辦的每一天（日期不一定相連），每天使用相同的時段，例如 11/7 和 11/21 都是 09:00–12:00。",sched:"為每一場活動設定日期和時間。同一天若有早上與下午兩場，可以加入同一個日期兩次。",range:"連續多日：從開始日到結束日每天都舉辦，每天使用相同的時段。如果是住宿營隊這類不分每天的活動，請勾選「跨日連續進行」。"}[k]}
 function form(e,draft,template,append=false,adminEdit=false){
-  if(adminEdit&&(!AUTH.me?.is_admin||AUTH.me.suspended||e?.status!=="approved"||e.archived_at))return;
+  if(adminEdit&&(!AUTH.me?.is_admin||AUTH.me.suspended||e.archived_at))return;
   const editing=e,imported=draft?.culture;
   if(template)e=template;
   const org=(adminEdit?e.profiles?.account_type:S.me?.account_type)==="organization",st=editing?taipeiDate(editing.start_at):null,en=editing?.end_at?taipeiDate(editing.end_at):null;
@@ -2116,7 +2133,7 @@ async function ensure(){if(Date.now()-T>60000)await load()}
 async function show(sub,id,params){const hash=location.hash;await ensure();if(hash!==location.hash)return;if(sub==="e")await detail(id,params);else if(sub==="org")await org(id);else home()}
 const SKIP=new Set(["menu","shut","auth","reg","login","signup","forgot","setpw","out","sus","unsus","delrep"]);
 Object.keys(act).forEach(k=>{if(!SKIP.has(k))ACT["e."+k]=act[k]});
-return{S,ensure,reset,show,openQuick,closeQuick,openDraft:form,openAdminEdit:(e,draft)=>form(e,draft,null,false,true),openNew:act.new,openWebDraft,attendanceList,listingType,exhibitionDates,eventRegistration,tRange,ageTxt,feeTxt,feeMatches,AUD,isOrg,orgTag,nick,REASONS,load,ecard,nextEventDate,upcomingSlots,eventSlots,eventLink,attendanceKey,slotText,bookingBadge,bookingState,normalizeCity,CITIES,ONLINE,taipeiToday,ymd,exhibitionPeriod,exhibitionEnded,exhibitionVisit,visitDetails,includesAge};
+return{S,ensure,reset,show,openQuick,effectiveEnd,eventExpired,publiclyListed,closeQuick,openDraft:form,openAdminEdit:(e,draft)=>form(e,draft,null,false,true),openNew:act.new,openWebDraft,attendanceList,listingType,exhibitionDates,eventRegistration,tRange,ageTxt,feeTxt,feeMatches,AUD,isOrg,orgTag,nick,REASONS,load,ecard,nextEventDate,upcomingSlots,eventSlots,eventLink,attendanceKey,slotText,bookingBadge,bookingState,normalizeCity,CITIES,ONLINE,taipeiToday,ymd,exhibitionPeriod,exhibitionEnded,exhibitionVisit,visitDetails,includesAge};
 })();
 ACT["activity-report"]=button=>{
   if(!AUTH.u){authBox(false);showToast("請登入後再回報活動資訊。");return}
@@ -2437,7 +2454,8 @@ function showImportQueue(queue){
     <p class="mu" id="import-message" role="status"></p></section>`;
   panel.querySelectorAll("[data-import-period]").forEach(button=>button.onclick=()=>{
     ADM.importPeriod=button.dataset.importPeriod;
-    showImportQueue(queue);
+    renderActivityManager();
+  showImportQueue(queue);
     panel.querySelector(`[data-import-period="${ADM.importPeriod}"]`)?.focus();
   });
   if(!rows.length)return;
@@ -2554,9 +2572,8 @@ async function adminPage(){
     ${section("reportHistory","回報紀錄",count(reviewedReports,reportError),reportError?'<p class="mu">無法讀取回報紀錄。</p>':reviewedReports.map(rItem).join("")||'<p class="mu">沒有已結案的回報。</p>')}
   </section>
   <section class="admin-group" aria-labelledby="admin-content-title"><h3 id="admin-content-title">活動管理</h3>
-    ${secOf(ADM.open,"published","已審核活動",published.length,published.slice(0,100).map(e=>`<div class="cm"><a href="#/events/e/${e.id}">${esc(e.title)}</a> · ${esc(tRange(e))} <button data-a="x.editEvent" data-id="${e.id}">編輯活動</button></div>`).join("")||'<p class="mu">沒有已審核活動。</p>')}
-    <details class="sec" data-k="archive" ${ADM.open.archive?"open":""}><summary><h3>活動封存（${archived.length}）</h3></summary><button data-a="x.archiveHistory">查看封存紀錄</button><div id="archive-history" aria-live="polite"></div>
-  ${archived.slice(0,100).map(e=>`<div class="cm"><a href="#/events/e/${e.id}">${esc(e.title)}</a> <button data-a="x.restoreEvent" data-id="${e.id}">解除封存</button></div>`).join("")||'<p class="mu">目前沒有封存活動。</p>'}</details>
+    <div id="activity-manager"></div>
+    <button data-a="x.archiveHistory">查看封存紀錄</button><div id="archive-history" aria-live="polite"></div>
   </section>
   <section class="admin-group" aria-labelledby="admin-members-title"><h3 id="admin-members-title">會員與商家</h3>
     ${section("members","會員管理（最近 100 筆）",count(members,memberError),memberHtml)}
@@ -2565,6 +2582,7 @@ async function adminPage(){
   </section>
   <div class="card-box"><h3>GA4 網站數據</h3><p class="mu">最近七個完整日</p><div class="r"><button data-a="x.gaReport">載入報表</button><a href="https://analytics.google.com/" target="_blank" rel="noopener noreferrer">開啟 Google Analytics ↗</a></div><div id="ga-report" aria-live="polite"></div></div>`;
   hookSec(ADM.open);
+  renderActivityManager();
   showImportQueue(queue);
   refreshDraftList();
 }
@@ -2697,7 +2715,7 @@ ACT["draft.open"]=el=>{
   if(!draft)return refreshDraftList();
   const games=type==="game",section=games?G:E;
   if(draft.adminEdit){
-    const event=E.S.ev.find(row=>row.id===draft.postId&&row.status==="approved"&&!row.archived_at);
+    const event=E.S.ev.find(row=>row.id===draft.postId&&!row.archived_at);
     if(!event||!AUTH.me?.is_admin||AUTH.me.suspended)return showToast("目前無法繼續編輯這筆活動");
     return E.openAdminEdit(event,draft);
   }
@@ -2750,6 +2768,33 @@ ACT["x.gaReport"]=async button=>{
   }catch{if(box.isConnected&&AUTH.u?.id===uid)box.textContent="目前無法取得 GA4 報表，請稍後再試。"}
   finally{button.disabled=false}
 };
+const activityState={tab:"pending",query:"",city:"",type:"",date:"",source:"",edit:null};
+const activityTabs={pending:"待審核",approved:"已發布",draft:"草稿",archived:"已封存"};
+function renderActivityManager(){
+ const box=$("#activity-manager");if(!box)return;
+ const st=activityState,rows=E.S.ev;
+ const status=e=>e.archived_at?"archived":e.status;
+ const selected=rows.filter(e=>status(e)===st.tab&&(!st.query||e.title.includes(st.query))&&(!st.city||e.city===st.city)&&(!st.type||e.listing_type===st.type)&&(!st.date||e.start_at?.slice(0,10)<=st.date&&(!e.end_at||e.end_at.slice(0,10)>=st.date))&&(!st.source||(e.shared_organizer?"shared":"hosted")===st.source));
+ box.innerHTML=`<div class="r" role="tablist">${Object.entries(activityTabs).map(([key,label])=>`<button role="tab" aria-selected="${key===st.tab}" data-tab="${key}">${label}（${rows.filter(e=>status(e)===key).length}）</button>`).join("")}</div>
+ <div class="r"><label>名稱搜尋<input data-filter="query" value="${esc(st.query)}"></label><label>地區<select data-filter="city"><option value="">全部</option>${[...new Set(rows.map(e=>e.city))].filter(Boolean).map(c=>`<option ${st.city===c?"selected":""}>${esc(c)}</option>`).join("")}</select></label><label>類型<select data-filter="type"><option value="">全部</option>${Object.entries({event:"活動",exhibition:"展覽",resource:"常態資源"}).map(([v,l])=>`<option value="${v}" ${st.type===v?"selected":""}>${l}</option>`).join("")}</select></label><label>日期<input type="date" data-filter="date" value="${esc(st.date)}"></label><label>來源<select data-filter="source"><option value="">全部</option><option value="hosted" ${st.source==="hosted"?"selected":""}>會員主辦</option><option value="shared" ${st.source==="shared"?"selected":""}>轉貼／匯入</option></select></label></div>
+ <div class="r"><label><input type="checkbox" id="activity-all">全選篩選結果</label>${["approved","archived","delete"].map(a=>`<button data-batch="${a}">${a==="delete"?"批次刪除":a==="approved"?"批次發布":"批次封存"}</button>`).join("")}<button data-clean>選取封存滿 90 天</button></div>
+ ${selected.map(e=>`<section class="cm"><label><input type="checkbox" data-select="${e.id}"><b>${esc(e.title)}</b></label><p>${esc(e.city)} · ${esc(E.tRange(e))} · ${esc(e.shared_organizer||e.profiles?.nickname||"會員主辦")} · ${e.shared_organizer?"轉貼／匯入":"會員投稿"} · ${activityTabs[status(e)]}${E.effectiveEnd(e)===null?" · 日期待確認":""}</p>${status(e)==="archived"?`<button data-a="x.restoreEvent" data-id="${e.id}">還原至草稿</button>`:`<button data-inline="${e.id}">編輯完整資料</button>`}<div id="inline-${e.id}"></div></section>`).join("")||'<p class="mu">沒有符合條件的活動。</p>'}`;
+ box.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{st.tab=b.dataset.tab;renderActivityManager()});
+ box.querySelectorAll('[data-filter]').forEach(b=>b.onchange=()=>{st[b.dataset.filter]=b.value;renderActivityManager()});
+ box.querySelector('#activity-all').onchange=e=>box.querySelectorAll('[data-select]').forEach(c=>c.checked=e.target.checked);
+ box.querySelector('[data-clean]').onclick=()=>box.querySelectorAll('[data-select]').forEach(c=>{const e=rows.find(e=>e.id===c.dataset.select);c.checked=!!e.archived_at&&Date.parse(e.archived_at)<Date.now()-90*86400000});
+ box.querySelectorAll('[data-batch]').forEach(b=>b.onclick=async()=>{
+  const ids=[...box.querySelectorAll('[data-select]:checked')].map(c=>c.dataset.select);if(!ids.length)return showToast("請先選取活動");
+  if(b.dataset.batch==="delete"&&!confirm(`確定永久刪除 ${ids.length} 筆活動？此操作無法還原。`))return;
+  b.disabled=true;await adminAct(()=>sb.rpc("admin_activity_action",{targets:ids,action:b.dataset.batch}));b.disabled=false;
+ });
+ box.querySelectorAll('[data-inline]').forEach(b=>b.onclick=()=>{
+  const e=rows.find(e=>e.id===b.dataset.inline);E.openAdminEdit(e);
+  // Reuse the existing complete validated editor, displaying all steps together.
+  const modal=document.querySelector('#mb');
+  if(modal){const host=document.getElementById('inline-'+e.id);while(modal.firstChild)host.append(modal.firstChild);$('#md').classList.remove('s');host.querySelectorAll('[data-next],[data-back],.post-preview,.post-steps').forEach(x=>x.hidden=true);host.querySelector('[data-submit]').hidden=false;host.querySelector('[data-submit]').textContent='審核並發布';host.querySelector('[data-save-draft]').onclick=()=>{activeDraft.targetStatus='draft';host.querySelector('[data-submit]').click()};host.querySelectorAll('.post-step').forEach(x=>{x.hidden=false;x.style.display='block'});}
+ });
+}
 ACT["x.editEvent"]=button=>E.openAdminEdit(E.S.ev.find(e=>e.id===button.dataset.id));
 ACT["x.reportStatus"]=el=>adminAct(()=>sb.rpc("launch_review_report",{report_id:el.dataset.id,decision:el.dataset.state}));
 
