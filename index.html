@@ -353,6 +353,7 @@ async function reactionCounts(kind,rows){
 function showLoadFailure(){
   $("#app").innerHTML='<div class="empty-state" role="alert"><strong>暫時無法讀取資料</strong><p>請檢查網路連線後再試一次。</p><button data-a="retry-route">重試</button></div>';
 }
+const gameOrgRestricted=profile=>profile?.account_type==="organization"&&!(profile.is_admin&&!profile.suspended);
 const canReview=post=>AUTH.me?.is_admin&&!AUTH.me.suspended&&post?.status==="pending";
 function reviewActions(type,post,reasons){
   if(!canReview(post))return "";
@@ -731,7 +732,7 @@ async function load(){
   counts=await reactionCounts("game",r[0].data||[]);
   [S.games,S.likes,S.favs,S.played]=r.map(x=>x.data||[]);T=Date.now();
 }
-const orgBlock=()=>{if(S.me?.account_type==="organization"){alert("商家與機構帳號僅能在「親子活動」發佈活動；遊戲區僅供家長非商業分享。");return true}return false};
+const orgBlock=(posting=false)=>{if(posting?gameOrgRestricted(S.me):S.me?.account_type==="organization"){alert("商家與機構帳號僅能在「親子活動」發佈活動；遊戲區僅供家長非商業分享。");return true}return false};
 const act={
   menu(el){const mn=$("#menu");if(!mn)return;const o=mn.classList.toggle("s");el.setAttribute("aria-expanded",o)},
   shut:()=>ACT.shut(),auth:()=>authBox(),reg:()=>authBox(true),
@@ -746,7 +747,7 @@ const act={
     if(error){$("#ae2").textContent="註冊失敗："+zh(error);cfReset()}else{$("#ae2").textContent="註冊成功！若沒有自動登入，請到信箱點確認信。"}
   },
   async out(){await sb.auth.signOut();location.hash="#/"},
-  new:trigger=>need("game",trigger)&&!orgBlock()&&form(),
+  new:trigger=>need("game",trigger)&&!orgBlock(true)&&form(),
   async toggle(el){if(!need())return;const t=el.dataset.t,id=el.dataset.id,on=has(S[t],id);
     const q=on?sb.from(t).delete().match({game_id:id,user_id:S.u.id}):sb.from(t).insert({game_id:id,user_id:S.u.id});
     const{error}=await q;if(error)return alert(zh(error));if(t==="favs"&&!on)analytics.event("favorite_game");await load();route()},
@@ -759,7 +760,7 @@ const act={
   async delcm(el){if(!confirm("刪除這則留言？"))return;await sb.from("comments").delete().eq("id",el.dataset.id);route()},
   async delgame(el){if(!confirm("確定刪除這個遊戲？"))return;const g=S.games.find(x=>x.id===el.dataset.id);
     if(g.photos.length)await sb.storage.from("photos").remove(g.photos);await sb.from("games").delete().eq("id",g.id);await load();afterDel("#/games")},
-  edit(el){if(!need()||orgBlock())return;const post=S.games.find(x=>x.id===el.dataset.id&&x.author_id===AUTH.u.id);if(post)form(post)},
+  edit(el){if(!need()||orgBlock(true))return;const post=S.games.find(x=>x.id===el.dataset.id&&x.author_id===AUTH.u.id);if(post)form(post)},
   rand(){const l=list();if(!l.length)return alert("目前沒有符合條件的遊戲");location.hash="#/games/g/"+l[Math.floor(Math.random()*l.length)].g.id},
   approve(el){return reviewPost(el,"games",S.games.find(g=>g.id===el.dataset.id),{status:"approved",reject_reason:null})},
   reject(el){const g=S.games.find(g=>g.id===el.dataset.id);
@@ -803,6 +804,7 @@ function home(){
   const ms=Object.keys(cn).sort((a,b)=>cn[b]-cn[a]).slice(0,40),B=(k,v,t,on)=>`<button data-a="g.chip" data-k="${k}" data-v="${esc(v)}" aria-pressed="${on}" class="k-${k} ${on?"on":""}">${esc(t)}</button>`;
   $("#app").innerHTML=`
   <div class="section-head hrow games-browse-head"><h2>找居家遊戲</h2><div class="r"><button class="p" data-a="g.new">＋ 分享遊戲</button><button data-a="g.rand">隨機找遊戲</button></div></div>
+  <p class="mu">本站遊戲僅供交流分享，點子不一定為分享者原創，也可能整理自既有玩法或遊玩經驗。</p>
   <section class="filter-panel"><div class="search-wrap"><input id="q" type="search" aria-label="搜尋遊戲" placeholder="搜尋遊戲名稱、玩法或材料…" value="${esc(S.q)}"></div>
   <div class="filter-label">孩子的年齡</div><div class="filter-row">${B("age",-1,"不限年齡",S.ages.size===0)}${AGES.map((a,i)=>B("age",i,a,S.ages.has(i))).join("")}</div>
   <details class="browse-filters" ${S.filterOpen?"open":""}><summary>更多篩選</summary><div class="browse-content">
@@ -835,13 +837,14 @@ async function detail(id){
   $("#app").innerHTML=`<p>${canReview(g)?'<a href="#/admin">← 返回審核</a>':'<a href="#/games">← 返回遊戲列表</a>'}</p><h2 style="margin:0">${esc(g.title)}</h2>
   ${g.status!=="approved"?`<p class="rule">${g.status==="pending"?"審核中，目前只有你和管理員看得到。":"已被退回："+esc(g.reject_reason)+"。修改後可重新送審。"}</p>`:""}
   ${g.photos.length?`<div class="pics">${g.photos.map(p=>`<a href="${pub(p)}" target="_blank"><img loading="lazy" decoding="async" src="${pub(p)}" alt=""></a>`).join("")}</div>`:""}
-  <p class="mu"><span class="t ag">${AGES[g.age]||"未指定年齡"}</span> 作者：<a data-go="#/games/by/${g.author_id}">${esc(nick(g))}</a> · ${cnt(S.played,id)} 個家庭玩過 · 瀏覽 ${views}</p>
+  <p class="mu"><span class="t ag">${AGES[g.age]||"未指定年齡"}</span> 分享者：<a data-go="#/games/by/${g.author_id}">${esc(nick(g))}</a> · ${cnt(S.played,id)} 個家庭玩過 · 瀏覽 ${views}</p>
+  <p class="mu">本站遊戲僅供交流分享，點子不一定為分享者原創，也可能整理自既有玩法或遊玩經驗。</p>
   <div>${g.tags.map(t=>`<span class="t ok">${esc(t)}</span>`).join("")}</div>
   <p><b>大約遊玩時間</b><br>${g.duration_label?esc(g.duration_label):"尚未標示"}</p>
   <p><b>需要的材料</b><br>${g.materials.length?g.materials.map(m=>`<span class="t">${esc(m)}</span>`).join(""):'<span class="mu">不需要特別材料</span>'}</p>
   <section><h3>怎麼玩</h3><ol class="game-steps">${String(g.how||"").split(/\r?\n+/).map(step=>step.replace(/^\s*(?:步驟\s*)?[0-9０-９]+\s*[.．、)）:：]\s*/,"").trim()).filter(Boolean).map(step=>`<li>${esc(step)}</li>`).join("")}</ol></section>
   ${g.link?`<p><b>相關連結</b><br><a href="${esc(g.link)}" target="_blank" rel="noopener noreferrer nofollow ugc">${esc(lhost(g.link))} ↗</a> <span class="mu">（外部連結，請自行留意）</span></p>`:""}
-  <div class="r">${B("likes",(has(S.likes,id)?"♥":"♡")+" 讚 "+cnt(S.likes,id))}${B("favs",(has(S.favs,id)?"★ 已收藏":"☆ 收藏")+" "+cnt(S.favs,id))}${B("played",(has(S.played,id)?"✓ 我們玩過了":"我們玩過了"))}<button data-a="g.share">分享連結</button><button data-a="g.report" data-k="game_id" data-id="${id}">檢舉</button>${mine?"":`<button data-a="g.report" data-k="target_user_id" data-id="${g.author_id}">檢舉作者</button>`}${mine?`<button data-a="g.edit" data-id="${id}">編輯</button>`:""}${mine||S.me?.is_admin?`<button class="d" data-a="g.delgame" data-id="${id}">刪除</button>`:""}</div>
+  <div class="r">${B("likes",(has(S.likes,id)?"♥":"♡")+" 讚 "+cnt(S.likes,id))}${B("favs",(has(S.favs,id)?"★ 已收藏":"☆ 收藏")+" "+cnt(S.favs,id))}${B("played",(has(S.played,id)?"✓ 我們玩過了":"我們玩過了"))}<button data-a="g.share">分享連結</button><button data-a="g.report" data-k="game_id" data-id="${id}">檢舉</button>${mine?"":`<button data-a="g.report" data-k="target_user_id" data-id="${g.author_id}">檢舉分享者</button>`}${mine?`<button data-a="g.edit" data-id="${id}">編輯</button>`:""}${mine||S.me?.is_admin?`<button class="d" data-a="g.delgame" data-id="${id}">刪除</button>`:""}</div>
   <h3>變化玩法與留言（${cs.length}）</h3>${cs.map(c=>`<div class="cm"><b>${esc(nick(c))}</b> <span class="mu">${new Date(c.created_at).toLocaleDateString("zh-TW")}</span><br>${esc(c.body).replace(/\n/g,"<br>")}<div class="mu"><a data-a="g.report" data-k="comment_id" data-id="${c.id}">檢舉</a>${S.u&&(c.user_id===S.u.id||S.me?.is_admin)?` · <a data-a="g.delcm" data-id="${c.id}">刪除</a>`:""}</div></div>`).join("")}
   ${S.u?`<textarea id="cin" rows="3" maxlength="300" placeholder="分享你的變化玩法或心得（300 字內）"></textarea><button class="p" data-a="g.cm" data-id="${id}">送出留言</button>`:'<p class="mu">登入後即可按讚、收藏、留言。</p>'}
   ${reviewActions("g",g,REASONS)}`;
@@ -853,7 +856,8 @@ function author(id){
 }
 function form(g,draft){
   modal(`<div data-draft-form="game"><h3 style="margin-top:0">${g?"編輯遊戲":"分享一個遊戲"}</h3>
-  <details class="rule posting-rules"><summary>投稿規則</summary><ul><li>本站僅供非商業分享：禁止廣告、推銷、團購、導購連結與業配</li><li>可以提到遊戲或桌遊的名稱，但請以玩法為主，不附購買連結、不推薦店家</li><li>桌遊等有版權的規則請用自己的話改寫，不要整段複製</li><li>照片請遵守隱私及著作權</li><li>名稱 20 字內，玩法 500 字內，材料最多 10 項</li><li>照片最多 3 張，每張原檔 8 MB 內（上傳時會自動壓縮）</li><li>內容須為原創或親身玩過，並適合孩子的年齡；遊戲安全請家長自行評估</li><li>相關連結同樣需通過審核</li><li>送出後需經審核才會公開${g?"（編輯後也會重新審核）":""}</li></ul></details>
+  <p class="mu">本站遊戲僅供交流分享，點子不一定為分享者原創，也可能整理自既有玩法或遊玩經驗。 分享他人玩法時，請註明已知來源，並用自己的話整理。</p>
+  <details class="rule posting-rules"><summary>投稿規則</summary><ul><li>本站僅供非商業分享：禁止廣告、推銷、團購、導購連結與業配</li><li>可以提到遊戲或桌遊的名稱，但請以玩法為主，不附購買連結、不推薦店家</li><li>桌遊等有版權的規則請用自己的話改寫，不要整段複製</li><li>照片請遵守隱私及著作權</li><li>名稱 20 字內，玩法 500 字內，材料最多 10 項</li><li>照片最多 3 張，每張原檔 8 MB 內（上傳時會自動壓縮）</li><li>遊戲點子不必為原創；請用自己的話整理玩法，註明已知來源，並確認適合孩子的年齡；遊戲安全請家長自行評估</li><li>相關連結同樣需通過審核</li><li>送出後需經審核才會公開${g?"（編輯後也會重新審核）":""}</li></ul></details>
   ${postSteps(["基本資料","玩法與材料","照片與送審"])}
   <section class="post-step"><h4 tabindex="-1">基本資料</h4>
   <label>遊戲名稱<input id="game-ft" maxlength="20" placeholder="例如：彩色毛球夾夾樂" value="${esc(g?.title)}"></label><p class="mu" style="margin:-8px 0 10px">用簡單的名稱描述活動，讓其他家長一眼看懂。</p>
@@ -864,7 +868,7 @@ function form(g,draft){
   <div class="game-tags" role="group" aria-label="遊戲標籤">${TAGS.map(t=>`<label><input type="checkbox" name="game-tag" class="ftag" value="${t}" ${g?.tags.includes(t)?"checked":""}> ${t}</label>`).join(" ")}</div>
   <label>怎麼玩<textarea id="game-fh" rows="5" maxlength="500" placeholder="可以寫孩子怎麼玩、你怎麼引導，以及孩子的反應。">${esc(g?.how)}</textarea></label><p class="mu" style="margin:-8px 0 10px">不需要寫得像教案，照平常分享的方式描述即可。</p>
   </section><section class="post-step" hidden><h4 tabindex="-1">照片與送審</h4><p class="post-preview"></p>
-  <label>相關連結（選填，例如影片或你的分享頁；需經審核）<input id="game-fl" type="url" maxlength="200" placeholder="https://" value="${esc(g?.link)}"></label>
+  <label>相關連結（選填，例如玩法來源、影片或你的分享頁；需經審核）<input id="game-fl" type="url" maxlength="200" placeholder="https://" value="${esc(g?.link)}"></label>
   <label>照片（最多 3 張${g?"；不選就保留原本的照片，選了會全部取代":""}）<input id="game-fp" type="file" accept="image/*" multiple></label>
   </section>${postActions("game",g?"儲存並重新送審":"送出審核")}</div>`);
   const val=id=>$("#game-"+id).value.trim();
@@ -2170,14 +2174,14 @@ privacy:["隱私權政策",`<p>「點子共玩所 Ideas together」（以下簡�
 <h3>十、政策修改</h3><p>本政策修改時會公布在本頁。</p>`],
 terms:["使用條款與免責聲明",`<h3>一、服務性質</h3><p>本站是讓家長交換居家親子遊戲點子的分享平台，內容由使用者提供。註冊或使用本站，即表示你同意本條款。</p>
 <h3>二、帳號</h3><ul><li>請提供真實可用的 Email，並自行保管密碼。</li><li>暱稱不得冒用他人、含有廣告，或使用不雅、侮辱性的文字，本站得要求更改或停權。</li></ul>
-<h3>三、投稿規則</h3><ul><li>本站僅供非商業分享：禁止廣告、推銷、團購、導購連結與業配。</li><li>可以提到遊戲或桌遊的名稱，但請以玩法為主，不附購買連結、不推薦店家。</li><li>內容須為原創或親身玩過，並適合孩子的年齡；桌遊等有版權的規則請用自己的話改寫。</li><li>照片與內容請遵守隱私及著作權（詳見「著作權與下架申請」）。</li><li>相關連結同樣需通過審核。</li></ul>
+<h3>三、投稿規則</h3><ul><li>本站僅供非商業分享：禁止廣告、推銷、團購、導購連結與業配。</li><li>可以提到遊戲或桌遊的名稱，但請以玩法為主，不附購買連結、不推薦店家。</li><li>遊戲純供交流分享，點子不一定為分享者原創。請註明已知來源，並確認適合孩子的年齡；桌遊等有版權的規則請用自己的話改寫，不要整段複製。</li><li>照片與內容請遵守隱私及著作權（詳見「著作權與下架申請」）。</li><li>相關連結同樣需通過審核。</li></ul>
 <h3>四、審核與管理</h3><p>審核只檢查內容是否符合投稿規則，不代表本站已驗證內容的正確性、安全性或效果。本站得在不事先通知的情況下退回、下架或刪除內容，並對違規帳號停權。停權後，該帳號無法投稿、留言或互動，其公開的遊戲與留言會被隱藏。</p>
 <h3>五、安全與免責聲明</h3><ul><li>所有遊戲都應在大人陪同下進行。請家長依孩子的年齡、能力、過敏與環境自行評估，特別留意小零件造成的噎到風險。</li><li>本站內容僅為家長分享的經驗，不是醫療、教育或心理專業建議，也不保證任何成效。</li><li>在法律允許的範圍內，本站與管理者不對因參考或使用本站內容所產生的損害負責。</li></ul>
 <h3>六、外部連結</h3><p>使用者提供的外部連結內容不屬於本站，本站不對其內容與安全負責，請自行留意。</p>
 <h3>七、服務變更</h3><p>本站可能因維護或其他原因暫時中斷、修改或終止服務。</p>
 <h3>八、親子活動資訊</h3><ul><li>活動資訊由主辦方（個人、商家或機構）提供，本站只做資訊公布，不代收報名與費用，也不是活動的主辦方、合作方或保證方。</li><li>「商家／機構」身分由註冊者自行選擇，本站不驗證其真實性。</li><li>活動日期、地點、費用與內容可能變更或取消，請以主辦方公告為準，參加前請自行確認並評估孩子的安全。</li><li>請不要在網站外先付款給不熟悉的對象；發現可疑活動請使用檢舉功能。</li><li>活動區僅限分享資訊，禁止促銷折扣、團購、業配與集客文字；商家與機構帳號不能在遊戲區投稿或留言。</li></ul>
 <h3>九、聯絡</h3><p>${MAIL}</p>`],
-copyright:["著作權與下架申請",`<h3>投稿者的聲明</h3><ul><li>你投稿的文字、照片與連結須為你自己創作，或已取得合法授權。</li><li>桌遊、書籍、教材等的規則與內容，請用自己的話改寫，不要整段複製；不要使用他人的圖片或作品。</li><li>照片中若有他人的肖像，須取得對方同意。</li></ul>
+copyright:["著作權與下架申請",`<h3>投稿者的聲明</h3><ul><li>遊戲點子不必為原創；分享既有玩法時，請註明已知來源。你投稿的文字與照片須為自己創作，或已取得合法授權；附上來源不代表已取得轉載授權。</li><li>桌遊、書籍、教材等的規則與內容，請用自己的話改寫，不要整段複製；不要使用他人的圖片或作品。</li><li>照片中若有他人的肖像，須取得對方同意。</li></ul>
 <h3>授權範圍</h3><p>你保有投稿內容的著作權。你同意授權本站在營運本站所需的範圍內，免費、非專屬地儲存、顯示、壓縮（例如縮小照片）你的投稿內容。你刪除內容或帳號後，這項授權隨之終止（已被他人以截圖等方式取得的部分除外）。</p>
 <h3>認為內容侵害你的權利？</h3><p>請寄信到 ${MAIL}，並附上：</p><ul><li>你的姓名與聯絡方式</li><li>你擁有的權利說明</li><li>被指侵權內容所在的頁面網址</li><li>說明為什麼該內容侵害你的權利</li><li>聲明你提供的資訊屬實</li></ul><p>我們會盡快審查，必要時會先暫時下架並通知投稿者。重複侵權的帳號將被停權。你也可以直接使用每個遊戲頁面上的「檢舉」按鈕。</p>`]
 };
@@ -2349,15 +2353,15 @@ async function accountPage(){
   const tb=(k,t)=>`<button data-a="a.tab" data-v="${k}" class="${ACC.tab===k?"on":""}">${t}</button>`;
   const none='<p class="mu">還沒有內容。</p>';
   const posts=["approved","pending","rejected"].map(status=>{
-    const games=org?[]:myG.filter(g=>g.status===status),events=myE.filter(e=>e.status===status);
+    const games=gameOrgRestricted(AUTH.me)?[]:myG.filter(g=>g.status===status),events=myE.filter(e=>e.status===status);
     const count=games.length+events.length;
     if(status==="rejected"&&!count)return "";
     return secOf(ACC.open,"posts-"+status,st[status],count,games.map(g=>gi(g,1)).join("")+events.map(e=>ei(e,1)).join("")||none);
-  }).join("")+(org?'<p class="mu">商家／機構帳號只能發佈活動。</p>':"");
+  }).join("")+(gameOrgRestricted(AUTH.me)?'<p class="mu">商家／機構帳號只能發佈活動。</p>':"");
   const favs=`${secOf(ACC.open,"fg","遊戲",fG.length,fG.map(g=>gi(g,0)).join("")||none)}${secOf(ACC.open,"fe","活動",fE.length,fE.map(e=>ei(e,0)).join("")||none)}`;
   $("#app").innerHTML=`${notice?`<div class="notice-banner">✓ ${esc(notice)} 目前狀態可在下方「我的投稿」查看。</div>`:""}${AUTH.me?.suspended?`<p class="rule">你的帳號已被停權，無法投稿、留言或互動。如有疑問請來信 ${MAIL}。</p>`:""}
   <h2 style="margin:6px 8px 12px">我的帳號</h2>
-  <div class="card-box"><p style="margin:0"><b>${esc(AUTH.me?.nickname||"")}</b> <span class="t ${org?"org":""}">${org?"商家／機構":"個人"}</span></p><p class="mu" style="margin:4px 0 0">${esc(AUTH.u.email||"")}</p>${org?`<div style="margin-top:12px"><label class="mu">商家／機構簡介（10–200 字，會顯示在你的主辦方頁面）<textarea id="pb" rows="3" maxlength="200">${esc(AUTH.me?.bio||"")}</textarea></label><label class="mu">官方網站（選填）<input id="pw" type="url" maxlength="200" placeholder="https://" value="${esc(AUTH.me?.website||"")}"></label><div class="r"><button data-a="a.savebio">儲存簡介</button><span class="mu" id="pbm"></span></div></div>`:""}<div class="r"><button class="p" data-a="e.new">＋ 分享活動</button>${org?"":'<button class="p" data-a="g.new">＋ 分享遊戲</button>'}</div></div>
+  <div class="card-box"><p style="margin:0"><b>${esc(AUTH.me?.nickname||"")}</b> <span class="t ${org?"org":""}">${org?"商家／機構":"個人"}</span></p><p class="mu" style="margin:4px 0 0">${esc(AUTH.u.email||"")}</p>${org?`<div style="margin-top:12px"><label class="mu">商家／機構簡介（10–200 字，會顯示在你的主辦方頁面）<textarea id="pb" rows="3" maxlength="200">${esc(AUTH.me?.bio||"")}</textarea></label><label class="mu">官方網站（選填）<input id="pw" type="url" maxlength="200" placeholder="https://" value="${esc(AUTH.me?.website||"")}"></label><div class="r"><button data-a="a.savebio">儲存簡介</button><span class="mu" id="pbm"></span></div></div>`:""}<div class="r"><button class="p" data-a="e.new">＋ 分享活動</button>${gameOrgRestricted(AUTH.me)?"":'<button class="p" data-a="g.new">＋ 分享遊戲</button>'}</div></div>
   <div id="draft-list"></div>
   <div class="r" style="margin-top:16px">${tb("posts","我的投稿")}${tb("favs","我的收藏")}${tb("attending","已報名活動")}</div>
   ${tab==="posts"?posts:tab==="favs"?favs:attendance}
@@ -2701,7 +2705,7 @@ function refreshDraftList(){
     });
     return '<h4 style="margin:12px 0 6px">'+label+'</h4>'+rows.join("");
   };
-  const game=AUTH.me?.account_type==="organization"?"":group("game","遊戲草稿");
+  const game=gameOrgRestricted(AUTH.me)?"":group("game","遊戲草稿");
   const event=group("event","活動草稿");
   box.innerHTML=game||event?'<div class="card-box" style="margin-top:14px">'+
     '<h3 style="margin:0 0 6px">尚未完成的草稿</h3>'+
@@ -2710,7 +2714,7 @@ function refreshDraftList(){
 ACT["draft.open"]=el=>{
   if(!need())return;
   const {type,id}=el.dataset;
-  if(type==="game"&&AUTH.me?.account_type==="organization")return;
+  if(type==="game"&&gameOrgRestricted(AUTH.me))return;
   const draft=readDrafts(type).find(d=>d.id===id);
   if(!draft)return refreshDraftList();
   const games=type==="game",section=games?G:E;
