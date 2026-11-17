@@ -720,7 +720,10 @@ async function finishLogin(session,input){
 const G=(()=>{
 let T=0;
 function route(){return ROUTE(true)}
-const AGES=["0–1 歲","1–2 歲","2–3 歲","3–4 歲","4–6 歲","6 歲以上","小一～小二","小三～小四","小五～小六"],DURATIONS=["5 分鐘內","5–15 分鐘","15–30 分鐘","30 分鐘以上"],TAGS=["5 分鐘內","安靜玩","室內","小空間","戶外","免準備","手作"];
+const AGES=["0 歲以上","1 歲以上","2 歲以上","3 歲以上","4 歲以上","6 歲以上","6 歲以上","8 歲以上","10 歲以上"],DURATIONS=["5 分鐘內","5–15 分鐘","15–30 分鐘","30 分鐘以上"],TAGS=["5 分鐘內","安靜玩","室內","小空間","戶外","免準備","手作"];
+// Keep stored age indices compatible; legacy primary-school grades share the six-year threshold.
+const gameAgeKey=age=>age===6?5:age;
+const AGE_OPTIONS=AGES.map((label,value)=>({label,value})).filter(({value})=>value!==6);
 const REASONS=["廣告或商業推廣","照片涉及隱私或著作權","連結不適當","內容不完整","不適合該年齡","重複投稿","不當內容"];
 const S={get u(){return AUTH.u},get me(){return AUTH.me},games:[],likes:[],favs:[],played:[],q:"",filterOpen:false,ages:new Set(),have:new Set(),tags:new Set(),sort:"new",fav:false};
 let counts;
@@ -786,7 +789,7 @@ const act={
 function list(){
   const h=S.have;
   let l=S.games.filter(g=>g.status==="approved").map(g=>({g,miss:g.materials.filter(m=>!h.has(m)).length,ov:g.materials.filter(m=>h.has(m)).length}));
-  l=l.filter(({g,ov})=>(S.ages.size===0||S.ages.has(g.age))&&(!S.fav||has(S.favs,g.id))&&[...S.tags].every(t=>g.tags.includes(t))&&matches(S.q,[g.title,g.how,...g.materials,...g.tags,nick(g),AGES[g.age]])&&(!h.size||ov>0||!g.materials.length));
+  l=l.filter(({g,ov})=>(S.ages.size===0||S.ages.has(gameAgeKey(g.age)))&&(!S.fav||has(S.favs,g.id))&&[...S.tags].every(t=>g.tags.includes(t))&&matches(S.q,[g.title,g.how,...g.materials,...g.tags,nick(g),AGES[g.age]])&&(!h.size||ov>0||!g.materials.length));
   const k={new:g=>Date.parse(g.created_at),likes:g=>cnt(S.likes,g.id),favs:g=>cnt(S.favs,g.id)}[S.sort];
   return l.sort((a,b)=>(h.size?a.miss-b.miss:0)||k(b.g)-k(a.g));
 }
@@ -806,7 +809,7 @@ function home(){
   <div class="section-head hrow games-browse-head"><h2>找居家遊戲</h2><div class="r"><button class="p" data-a="g.new">＋ 分享遊戲</button><button data-a="g.rand">隨機找遊戲</button></div></div>
   <p class="mu">本站遊戲僅供交流分享，點子不一定為分享者原創，也可能整理自既有玩法或遊玩經驗。</p>
   <section class="filter-panel"><div class="search-wrap"><input id="q" type="search" aria-label="搜尋遊戲" placeholder="搜尋遊戲名稱、玩法或材料…" value="${esc(S.q)}"></div>
-  <div class="filter-label">孩子的年齡</div><div class="filter-row">${B("age",-1,"不限年齡",S.ages.size===0)}${AGES.map((a,i)=>B("age",i,a,S.ages.has(i))).join("")}</div>
+  <div class="filter-label">適合年齡</div><div class="filter-row">${B("age",-1,"不限年齡",S.ages.size===0)}${AGE_OPTIONS.map(({label,value})=>B("age",value,label,S.ages.has(value))).join("")}</div>
   <details class="browse-filters" ${S.filterOpen?"open":""}><summary>更多篩選</summary><div class="browse-content">
   <div class="filter-label">想玩哪一種？</div><div class="filter-row">${TAGS.map(t=>B("tags",t,t,S.tags.has(t))).join("")}</div>
   ${ms.length?`<div class="filter-label">我家有這些材料</div><div class="filter-row">${ms.map(m=>B("have",m,m,S.have.has(m))).join("")}${S.have.size?'<button data-a="g.clr">清除材料</button>':""}</div>`:""}
@@ -861,7 +864,7 @@ function form(g,draft){
   ${postSteps(["基本資料","玩法與材料","照片與送審"])}
   <section class="post-step"><h4 tabindex="-1">基本資料</h4>
   <label>遊戲名稱<input id="game-ft" maxlength="20" placeholder="例如：彩色毛球夾夾樂" value="${esc(g?.title)}"></label><p class="mu" style="margin:-8px 0 10px">用簡單的名稱描述活動，讓其他家長一眼看懂。</p>
-  <label>適合年齡<select id="game-fa">${AGES.map((a,i)=>`<option value="${i}" ${g?.age===i?"selected":""}>${a}</option>`).join("")}</select></label>
+  <label>適合年齡（幾歲以上）<select id="game-fa">${AGES.map((a,i)=>`<option value="${i}" ${i===6?"hidden":""} ${g?.age===i?"selected":""}>${a}</option>`).join("")}</select></label>
   <label>大約遊玩時間<select id="game-fdur"><option value="">請選擇（選填）</option>${DURATIONS.map(x=>`<option value="${x}" ${g?.duration_label===x?"selected":""}>${x}</option>`).join("")}</select></label>
   </section><section class="post-step" hidden><h4 tabindex="-1">玩法與材料</h4>
   <label>需要的材料（用頓號分隔，例如：紙箱、膠帶）<input id="game-fm" value="${esc(g?.materials.join("、"))}"></label>
@@ -890,7 +893,7 @@ function form(g,draft){
     },
     preview(box){box.textContent=[val("ft"),AGES[+val("fa")],val("fdur"),materials().join("、")].filter(Boolean).join(" · ")},
     async submit(ctx){
-      const row={title:val("ft"),how:val("fh"),age:+val("fa"),duration_label:val("fdur")||null,
+      const row={title:val("ft"),how:val("fh"),age:gameAgeKey(+val("fa")),duration_label:val("fdur")||null,
         materials:materials(),tags:[...ctx.form.querySelectorAll(".ftag:checked")].map(x=>x.value),link:val("fl")||null};
       await savePost(ctx,"games",row,photos(),g?.photos||[],photos=>({photos}));
       T=0;
